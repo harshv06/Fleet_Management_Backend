@@ -1,0 +1,23 @@
+const PaymentService = require("../services/PaymentService");
+
+class PaymentController {
+  static async getAdvancePayment(req, res) {
+    try {
+      const { carId } = req.params;
+      const { startDate, endDate } = req.query;
+      const payments=await PaymentService.getAdvancePayment(carId, startDate, endDate);
+      console.log(payments);
+      res.json({
+        status: 'success',
+        payments: payments
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+  }
+}
+
+module.exports = PaymentController;

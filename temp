@@ -1,0 +1,271 @@
+// In your CarPayments Repository or Service
+class CarPaymentsRepository {
+  static async deleteCarPayments(carId, options = {}) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      // Find all payments for the car before deletion
+      const paymentsToDelete = await CarPayments.findAll({
+        where: { car_id: carId },
+        transaction
+      });
+
+      // Calculate total expenses to be removed (focusing on advance payments)
+      const totalExpensesToRemove = paymentsToDelete
+        .filter(payment => payment.payment_type === 'advance')
+        .reduce((total, payment) => total + parseFloat(payment.amount), 0);
+
+      // Delete payments
+      const deletedCount = await CarPayments.destroy({ 
+        where: { car_id: carId },
+        transaction
+      });
+
+      // Update Company Stats
+      await CompanyStats.decrement('total_expenses', {
+        by: totalExpensesToRemove,
+        where: { id: 1 },
+        transaction
+      });
+
+      // Clear cache if needed
+      await this.clearCarCache(carId);
+
+      // Commit transaction
+      await transaction.commit();
+
+      return {
+        status: "success",
+        message: "Car payments deleted successfully",
+        deletedPaymentsCount: deletedCount,
+        removedExpenses: totalExpensesToRemove
+      };
+    } catch (error) {
+      // Rollback transaction
+      await transaction.rollback();
+      
+      // Log the error
+      console.error('Error deleting car payments:', error);
+      
+      throw error;
+    }
+  }
+
+  // Method to delete a specific payment
+  static async deleteSpecificPayment(paymentId) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      // Find the payment first
+      const payment = await CarPayments.findByPk(paymentId, { transaction });
+
+      if (!payment) {
+        throw new Error('Payment not found');
+      }
+
+      // Only decrement expenses if it's an advance payment
+      if (payment.payment_type === 'advance') {
+        await CompanyStats.decrement('total_expenses', {
+          by: parseFloat(payment.amount),
+          where: { id: 1 },
+          transaction
+        });
+      }
+
+      // Delete the specific payment
+      await payment.destroy({ transaction });
+
+      // Clear relevant cache
+      await this.clearPaymentCache(paymentId);
+
+      // Commit transaction
+      await transaction.commit();
+
+      return {
+        status: "success",
+        message: "Payment deleted successfully",
+        deletedAmount: payment.amount
+      };
+    } catch (error) {
+      // Rollback transaction
+      await transaction.rollback();
+      
+      // Log the error
+      console.error('Error deleting specific payment:', error);
+      
+      throw error;
+    }
+  }
+
+  // Method to update a payment (with expense adjustment)
+  static async updatePayment(paymentId, updateData) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      // Find the existing payment
+      const existingPayment = await CarPayments.findByPk(paymentId, { transaction });
+
+      if (!existingPayment) {
+        throw new Error('Payment not found');
+      }
+
+      // Calculate amount difference
+      const oldAmount = parseFloat(existingPayment.amount);
+      const newAmount = parseFloat(updateData.amount);
+      const amountDifference = newAmount - oldAmount;
+
+      // Update payment
+      const updatedPayment = await existingPayment.update(updateData, { transaction });
+
+      // Adjust expenses if it's an advance payment
+      if (existingPayment.payment_type === 'advance') {
+        await CompanyStats.increment('total_expenses', {
+          by: amountDifference,
+          where: { id: 1 },
+          transaction
+        });
+      }
+
+      // Commit transaction
+      await transaction.commit();
+
+      return {
+        status: "success",
+        message: "Payment updated successfully",
+        payment: updatedPayment,
+        expenseAdjustment: amountDifference
+      };
+    } catch (error) {
+      // Rollback transaction
+      await transaction.rollback();
+      
+      // Log the error
+      console.error('Error updating payment:', error);
+      
+      throw error;
+    }
+  }
+
+  // Utility method to clear cache (implement based on your caching strategy)
+  static async clearCarCache(carId) {
+    // Implement cache clearing logic
+    // Example with Redis:
+    // await redisClient.del(`car:${carId}`);
+  }
+
+  // Utility method to clear payment cache
+  static async clearPaymentCache(paymentId) {
+    // Implement cache clearing logic
+    // Example with Redis:
+    // await redisClient.del(`payment:${paymentId}`);
+  }
+}
+
+// Model Hook for additional safety
+module.exports = (sequelize, DataTypes) => {
+  const CarPayments = sequelize.define('CarPayments', {
+    // ... existing fields
+  }, {
+    hooks: {
+      // Hook to manage expenses during deletion
+      afterDestroy: async (payment, options) => {
+        if (payment.payment_type === 'advance') {
+          const { CompanyStats } = sequelize.models;
+          await CompanyStats.decrement('total_expenses', {
+            by: parseFloat(payment.amount),
+            where: { id: 1 },
+            transaction: options.transaction
+          });
+        }
+      },
+
+      // Hook for bulk deletions
+      afterBulkDestroy: async (options) => {
+        const { where } = options;
+        
+        if (where && where.car_id) {
+          const deletedPayments = await CarPayments.findAll({
+            where: { car_id: where.car_id },
+            paranoid: false
+          });
+
+          const totalDeletedExpenses = deletedPayments
+            .filter(payment => payment.payment_type === 'advance')
+            .reduce((total, payment) => total + parseFloat(payment.amount), 0);
+
+          const { CompanyStats } = sequelize.models;
+          await CompanyStats.decrement('total_expenses', {
+            by: totalDeletedExpenses,
+            where: { id: 1 },
+            transaction: options.transaction
+          });
+        }
+      }
+    }
+  });
+
+  return CarPayments;
+};
+
+// Service Layer
+class CarPaymentsService {
+  async deletePayment(paymentId) {
+    try {
+      // Additional business logic validation can be added here
+      const result = await CarPaymentsRepository.deleteSpecificPayment(paymentId);
+      
+      // Logging or additional notifications can be added
+      return result;
+    } catch (error) {
+      // Log the error
+      console.error('Error in deleting payment', error);
+      throw error;
+    }
+  }
+
+  async updatePayment(paymentId, updateData) {
+    try {
+      // Validate input data
+      this.validatePaymentUpdate(updateData);
+
+      // Update payment
+      const result = await CarPaymentsRepository.updatePayment(paymentId, updateData);
+      
+      return result;
+    } catch (error) {
+      console.error('Error in updating payment', error);
+      throw error;
+    }
+  }
+
+  // Validation method
+  validatePaymentUpdate(updateData) {
+    if (updateData.amount && parseFloat(updateData.amount) <= 0) {
+      throw new Error('Payment amount must be positive');
+    }
+
+    // Add more validation rules as needed
+  }
+}
+
+// Controller
+class CarPaymentsController {
+  async deletePayment(req, res) {
+    try {
+      const { paymentId } = req.params;
+
+      const result = await carPaymentsService.deletePayment(paymentId);
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        deletedAmount: result.deletedAmount
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+}
