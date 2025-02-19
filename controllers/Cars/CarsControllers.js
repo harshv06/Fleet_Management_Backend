@@ -241,6 +241,51 @@ class CarsController {
       res.status(500).json({ error: "Internal server error" });
     }
   }
+
+  static async updateCarPayment(req, res) {
+    try {
+      const { paymentId } = req.params;
+      const payment = await CarsService.updateCarPayment(paymentId, req.body);
+      res.json(payment);
+    } catch (error) {
+      console.error("Error in updateCarPayment controller:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  static async unassignCompaniesFromCar(req, res) {
+    try {
+      const { carId, companyId } = req.params;
+      // Validate input
+      if (!carId || !companyId) {
+        return res.status(400).json({
+          status: "error",
+          message: "Invalid input: Car ID and companies are required",
+        });
+      }
+
+      const unassignments =
+        await CarCompanyAssignmentService.unassignCompaniesFromCar(
+          carId,
+          companyId
+        );
+
+      res.status(201).json({
+        status: "success",
+        message: "Companies unassigned successfully",
+        data: {
+          unassignments,
+          total: unassignments.length,
+        },
+      });
+    } catch (error) {
+      console.error("Unassign Companies Error:", error);
+      res.status(500).json({
+        status: "error",
+        message: error.message || "Failed to unassign companies",
+      });
+    }
+  }
 }
 
 module.exports = CarsController;

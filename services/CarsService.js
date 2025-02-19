@@ -174,6 +174,7 @@ class CarsService {
         },
         { transaction }
       );
+      // console.log("Paymen:",payment);
 
       // Log transaction history as an EXPENSE
       const transactionRecord = await PaymentHistory.create(
@@ -606,6 +607,28 @@ class CarsService {
       };
     } catch (error) {
       // Always rollback the transaction in case of an error
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  static async updateCarPayment(paymentId, updateData) {
+    const transaction = await sequelize.transaction();
+    try {
+      const payment = await CarPayments.findByPk(paymentId, {
+        transaction,
+      });
+      if (!payment) {
+        throw new Error("Payment not found");
+      }
+      await payment.update(updateData, { transaction });
+      await transaction.commit();
+      return {
+        status: "success",
+        message: "Payment updated successfully",
+        data: payment,
+      };
+    } catch (error) {
       await transaction.rollback();
       throw error;
     }

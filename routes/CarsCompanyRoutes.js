@@ -24,8 +24,22 @@ router.get(
 // Assign companies to a car
 router.post(
   "/cars/:carId/assign-companies",
-  clearCacheMiddleware(["Companies_Available_","Cars_Assigned_To_Company_","dashboard_data_"]),
+  clearCacheMiddleware([
+    "Companies_Available_",
+    "Cars_Assigned_To_Company_",
+    "dashboard_data_",
+  ]),
   CarsController.assignCompaniesToCar
+);
+
+router.put(
+  "/cars/:carId/unassign-companies/:companyId",
+  clearCacheMiddleware([
+    "Companies_Available_",
+    "Cars_Assigned_To_Company_",
+    "dashboard_data_",
+  ]),
+  CarsController.unassignCompaniesFromCar
 );
 
 module.exports = router;

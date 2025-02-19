@@ -98,4 +98,16 @@ router.delete(
   CarsController.deleteCarPayment
 );
 
+router.put(
+  "/cars/payments/update/:paymentId",
+  apiLimiter,
+  clearCacheMiddleware([
+    "car_payments_",
+    "cars_list_",
+    "payment_history_",
+    "dashboard_data_",
+  ]),
+  CarsController.updateCarPayment
+);
+
 module.exports = router;

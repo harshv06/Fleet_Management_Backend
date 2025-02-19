@@ -72,7 +72,7 @@ class InvoiceService {
       await InvoiceItems.bulkCreate(invoiceItems, { transaction });
 
       // Update company stats
-      await CompanyStats.updateInvoiceStats(invoice);
+      // await CompanyStats.updateInvoiceStats(invoice);
       await PaymentHistory.logTransaction(
         invoiceData.company_id,
         "INVOICE",
