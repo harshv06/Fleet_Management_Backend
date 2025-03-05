@@ -7,38 +7,49 @@ const AuthService = require("../../services/Auth/authService.js");
 class AuthController {
   static async signup(req, res) {
     try {
-      const { name, email, password } = req.body;
+      const { username, email, password } = req.body;
+      console.log(username,email,password)
 
-      // Check if user already exists
+     
+      if (!username || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "All fields are required",
+        });
+      }
+
       const existingUser = await User.findOne({ where: { email } });
       if (existingUser) {
+        console.log("allready exists")
         return res.status(400).json({
+          success: false,
           message: "User already exists",
         });
       }
 
-      // Hash password
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
-
-      // Create user
       const user = await User.create({
-        name,
-        email,
+        username,       
+        email: email,
         password: hashedPassword,
-        role: "VIEWER", // Default role
+        role: "SUPER_ADMIN",
       });
 
+   
       res.status(201).json({
+        success: true,
         message: "User created successfully",
         user: {
-          id: user.user_id,
-          name: user.name,
+          id: user.id,        
+          name: user.name,       
           email: user.email,
         },
       });
     } catch (error) {
+      console.error("Signup error:", error); 
       res.status(500).json({
+        success: false,
         message: "Signup failed",
         error: error.message,
       });
@@ -48,7 +59,7 @@ class AuthController {
   static async login(req, res) {
     try {
       const { email, password } = req.body;
-      // console.log(email, password);
+   
 
       if (!email || !password) {
         return res.status(400).json({
@@ -62,7 +73,7 @@ class AuthController {
           message: "Invalid credentials",
         });
       }
-      // console.log(response);
+    
       res.status(200).json({
         message: "Login successful",
         user: response,
