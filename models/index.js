@@ -20,7 +20,8 @@ const PurchaseInvoiceItemModel = require("./PurchaseInvoiceItem");
 const PurchaseTransactionModel = require("./PurchaseTransactions");
 const DayBookModel = require("./DayBook/DayBook");
 const MonthlyBalanceModel = require("./DayBook/MonthlyBalance");
-const OpeningBalanceModel=require("./DayBook/OpeningBalance")
+const OpeningBalanceModel = require("./DayBook/OpeningBalance");
+const CategoryModel = require("./DayBook/Categories");
 
 // Initialize models
 const Company = CompanyModel(sequelize, DataTypes);
@@ -40,7 +41,8 @@ const PurchaseInvoiceItem = PurchaseInvoiceItemModel(sequelize, DataTypes);
 const PurchaseTransaction = PurchaseTransactionModel(sequelize, DataTypes);
 const DayBook = DayBookModel(sequelize, DataTypes);
 const MonthlyBalance = MonthlyBalanceModel(sequelize, DataTypes);
-const OpeningBalance=OpeningBalanceModel(sequelize,DataTypes)
+const OpeningBalance = OpeningBalanceModel(sequelize, DataTypes);
+const Category = CategoryModel(sequelize, DataTypes);
 
 // Comprehensive Associations
 
@@ -313,5 +315,6 @@ module.exports = {
   PurchaseTransaction,
   DayBook,
   MonthlyBalance,
-  OpeningBalance
+  OpeningBalance,
+  Category
 };
