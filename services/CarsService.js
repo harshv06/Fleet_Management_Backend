@@ -18,12 +18,13 @@ class CarsService {
     limit = 10,
     search = "",
     sortBy = "car_id",
-    sortOrder = "ASC"
+    sortOrder = "ASC",
+    status = null
   ) {
     try {
       const offset = (page - 1) * limit;
 
-      // Build where clause for search
+      // Build where clause for search and status
       const where = {};
       if (search) {
         where[Op.or] = [
@@ -31,6 +32,11 @@ class CarsService {
           { car_model: { [Op.iLike]: `%${search}%` } },
           { car_id: { [Op.iLike]: `%${search}%` } },
         ];
+      }
+
+      // Add status filter if provided
+      if (status && status !== "ALL") {
+        where.status = status;
       }
 
       const cars = await Cars.findAndCountAll({
@@ -51,6 +57,10 @@ class CarsService {
           "owner_account_number",
           "ifsc_code",
           "address",
+          "payment_type",
+          "per_trip_amount",
+          "monthly_package_rate",
+          "status",
         ],
         include: [
           {
@@ -75,6 +85,7 @@ class CarsService {
           };
         })
       );
+
       return {
         status: "success",
         data: {
@@ -101,6 +112,13 @@ class CarsService {
   static async getCarById(id) {
     try {
       const car = await Cars.findByPk(id, {
+        attributes: [
+          "car_id", "car_name", "car_model", "induction_date",
+          "type_of_car", "driver_name", "driver_number",
+          "owner_name", "owner_number", "owner_account_number",
+          "ifsc_code", "address", "payment_type", "per_trip_amount",
+          "monthly_package_rate", "status"
+        ],
         include: [
           {
             model: CarPayments,
@@ -112,15 +130,15 @@ class CarsService {
           [{ model: CarPayments, as: "carPayments" }, "payment_date", "DESC"],
         ],
       });
-
+  
       if (!car) {
         throw new Error("Car not found");
       }
-
+  
       const totalPayments = await CarPayments.sum("amount", {
         where: { car_id: id },
       });
-
+  
       return {
         status: "success",
         data: {
@@ -442,12 +460,59 @@ class CarsService {
     }
   }
 
-  static async addCar(car) {
+  static async addCar(carData) {
     const transaction = await sequelize.transaction();
     try {
-      const newCar = await Cars.create(car, { transaction });
+      // Validate required fields
+      const requiredFields = [
+        "car_id",
+        "car_name",
+        "car_model",
+        "driver_name",
+        "driver_number",
+        "payment_type",
+      ];
+
+      for (const field of requiredFields) {
+        if (!carData[field]) {
+          throw new Error(`${field.replace("_", " ")} is required`);
+        }
+      }
+
+      // Validate payment type specific fields
+      if (carData.payment_type === "TRIP_BASED" && !carData.per_trip_amount) {
+        throw new Error("Per trip amount is required for trip-based payment");
+      }
+      if (
+        carData.payment_type === "PACKAGE_BASED" &&
+        !carData.monthly_package_rate
+      ) {
+        throw new Error(
+          "Monthly package rate is required for package-based payment"
+        );
+      }
+
+      // Format the data
+      const formattedData = {
+        ...carData,
+        status: carData.status || "IN_PROCESS",
+        induction_date: carData.induction_date
+          ? new Date(carData.induction_date)
+          : new Date(),
+        per_trip_amount:
+          carData.payment_type === "TRIP_BASED"
+            ? parseFloat(carData.per_trip_amount)
+            : null,
+        monthly_package_rate:
+          carData.payment_type === "PACKAGE_BASED"
+            ? parseFloat(carData.monthly_package_rate)
+            : null,
+      };
+
+      const newCar = await Cars.create(formattedData, { transaction });
       await this.clearCarCache();
       await transaction.commit();
+
       return {
         status: "success",
         message: "Car added successfully",
@@ -486,7 +551,36 @@ class CarsService {
         throw new Error("Car not found");
       }
 
-      await car.update(carData, { transaction });
+      // Validate payment type specific fields
+      if (carData.payment_type === "TRIP_BASED" && !carData.per_trip_amount) {
+        throw new Error("Per trip amount is required for trip-based payment");
+      }
+      if (
+        carData.payment_type === "PACKAGE_BASED" &&
+        !carData.monthly_package_rate
+      ) {
+        throw new Error(
+          "Monthly package rate is required for package-based payment"
+        );
+      }
+
+      // Format the update data
+      const updateData = {
+        ...carData,
+        induction_date: carData.induction_date
+          ? new Date(carData.induction_date)
+          : car.induction_date,
+        per_trip_amount:
+          carData.payment_type === "TRIP_BASED"
+            ? parseFloat(carData.per_trip_amount)
+            : null,
+        monthly_package_rate:
+          carData.payment_type === "PACKAGE_BASED"
+            ? parseFloat(carData.monthly_package_rate)
+            : null,
+      };
+
+      await car.update(updateData, { transaction });
       await this.clearCarCache(carId);
       await transaction.commit();
 
