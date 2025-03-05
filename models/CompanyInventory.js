@@ -277,6 +277,17 @@ module.exports = (sequelize, DataTypes) => {
   //   }
   // };
 
+  CompanyStats.updateExpenseStats = async function (expenseData) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      console.log("Updating expense stats for transaction:", expenseData);
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  };
+
   CompanyStats.updateTransactionStats = async function (transactionData) {
     const transaction = await sequelize.transaction();
 
@@ -305,7 +316,7 @@ module.exports = (sequelize, DataTypes) => {
       const updateData = {};
       const amount = parseFloat(transactionData.amount);
 
-      if (transactionData.transaction_type === "REVENUE") {
+      if (transactionData.transaction_type === "INCOME_COMPANY_PAYMENT") {
         updateData.total_revenue =
           parseFloat(companyStats.total_revenue) + amount;
       } else if (
@@ -358,6 +369,49 @@ module.exports = (sequelize, DataTypes) => {
         // ... other existing fields
       };
     } catch (error) {
+      throw error;
+    }
+  };
+
+  // In your CompanyStats model
+  CompanyStats.updatePurchaseExpenses = async function (
+    vendorId,
+    amount,
+    action
+  ) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      let stats = await this.findOne({
+        where: { company_id: vendorId || 1 },
+        transaction,
+      });
+
+      if (!stats) {
+        stats = await this.create(
+          {
+            company_id: vendorId || 1,
+            total_expenses: 0,
+            // ... other initial values
+          },
+          { transaction }
+        );
+      }
+
+      const updateData = {
+        total_expenses:
+          action === "add"
+            ? sequelize.literal(`total_expenses + ${amount}`)
+            : sequelize.literal(`GREATEST(0, total_expenses - ${amount})`),
+        updated_at: new Date(),
+      };
+
+      await stats.update(updateData, { transaction });
+      await transaction.commit();
+
+      return stats;
+    } catch (error) {
+      await transaction.rollback();
       throw error;
     }
   };

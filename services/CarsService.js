@@ -1,7 +1,15 @@
 const { QueryTypes } = require("sequelize");
 const sequelize = require("../config/dbConfig");
-const { Cars, CarPayments, CompanyStats, Company,PaymentHistory } = require("../models/index");
+const {
+  Cars,
+  CarPayments,
+  CompanyStats,
+  Company,
+  PaymentHistory,
+  CarExpenseStats,
+} = require("../models/index");
 const { cacheService } = require("../utils/cache");
+const { Op } = require("sequelize");
 const cache = require("../utils/cache");
 
 class CarsService {
@@ -96,12 +104,12 @@ class CarsService {
         include: [
           {
             model: CarPayments,
-            as: "payments",
+            as: "carPayments",
             attributes: ["payment_id", "amount", "payment_date"],
           },
         ],
         order: [
-          [{ model: CarPayments, as: "payments" }, "payment_date", "DESC"],
+          [{ model: CarPayments, as: "carPayments" }, "payment_date", "DESC"],
         ],
       });
 
@@ -155,6 +163,14 @@ class CarsService {
         throw new Error("Invalid payment amount");
       }
 
+      // Convert payment_date string to Date object
+      const paymentDate = paymentData.payment_date
+        ? new Date(paymentData.payment_date)
+        : new Date();
+
+      // Format amount to ensure it's a number
+      const amount = parseFloat(paymentData.amount);
+
       // Validate car exists
       const car = await Cars.findByPk(paymentData.car_id, {
         attributes: ["car_id"],
@@ -167,42 +183,73 @@ class CarsService {
       const payment = await CarPayments.create(
         {
           car_id: paymentData.car_id,
-          amount: paymentData.amount,
+          amount: amount,
           payment_type: paymentData.payment_type || "advance",
-          payment_date: paymentData.payment_date || new Date(),
+          payment_date: paymentDate,
           notes: paymentData.notes || "",
         },
         { transaction }
       );
-      // console.log("Paymen:",payment);
 
-      // Log transaction history as an EXPENSE
+      // Create transaction record
       const transactionRecord = await PaymentHistory.create(
         {
-          company_id: null,
-          transaction_type: "CAR_ADVANCE_PAYMENT",
-          amount: paymentData.amount,
-          reference_id: payment.payment_id, // Use the correct primary key
-          transaction_date: paymentData.payment_date || new Date(),
-          description: `Advance payment for car ${car.car_id}`,
+          transaction_type: "EXPENSE_CAR_ADVANCE",
+          amount: amount,
+          reference_id: payment.payment_id.toString(),
+          transaction_date: paymentDate,
+          description: `Advance payment for car ${paymentData.car_id}`,
+          transaction_source: "CAR",
+          reference_source_id: paymentData.car_id,
           metadata: {
             car_id: paymentData.car_id,
             payment_type: paymentData.payment_type || "advance",
+            month: paymentDate.getMonth() + 1,
+            year: paymentDate.getFullYear(),
+            payment_date: paymentDate.toISOString(),
           },
         },
         { transaction }
       );
 
-      // Update Company Stats - Increase Expenses
-      // await CompanyStats.updateInvoiceStats(
-      //   {
-      //     company_id: 0,
-      //     grand_total: paymentData.amount,
-      //     status: "expense",
-      //     invoice_id: transactionRecord.transaction_id,
-      //   },
-      //   { transaction }
-      // );
+      // Calculate Total Expense
+      let totalExpense = 0;
+      try {
+        const previousTotalExpense =
+          await CarExpenseStats.calculateCumulativeExpenses(
+            paymentData.car_id,
+            paymentDate.getMonth() + 1,
+            paymentDate.getFullYear()
+          );
+
+        // Ensure totalExpense is a number
+        totalExpense = parseFloat(previousTotalExpense || 0) + amount;
+      } catch (calcError) {
+        console.warn("Failed to calculate cumulative expenses:", calcError);
+        // Default to current amount if calculation fails
+        totalExpense = amount;
+      }
+
+      // Create expense entry
+      const expenseEntry = await CarExpenseStats.create(
+        {
+          car_id: paymentData.car_id,
+          category: "ADVANCE", // Using 'ADVANCE' as a category
+          amount: amount,
+          total_expense: totalExpense, // Ensure this is set before creation
+          month: paymentDate.getMonth() + 1,
+          year: paymentDate.getFullYear(),
+          description:
+            paymentData.notes ||
+            `Advance payment for car ${paymentData.car_id}`,
+          additional_details: {
+            payment_id: payment.payment_id,
+            payment_type: payment.payment_type,
+            reference_id: transactionRecord.transaction_id,
+          },
+        },
+        { transaction }
+      );
 
       await transaction.commit();
 
@@ -210,14 +257,31 @@ class CarsService {
         status: "success",
         message: "Car payment expense recorded successfully",
         data: {
-          payment,
-          transaction: transactionRecord,
+          payment: {
+            payment_id: payment.payment_id,
+            car_id: payment.car_id,
+            amount: payment.amount,
+            payment_type: payment.payment_type,
+            payment_date: payment.payment_date,
+            notes: payment.notes,
+          },
+          transaction: {
+            transaction_id: transactionRecord.transaction_id,
+            type: transactionRecord.transaction_type,
+            amount: transactionRecord.amount,
+            date: transactionRecord.transaction_date,
+          },
+          expenseEntry: {
+            id: expenseEntry.id,
+            total_expense: expenseEntry.total_expense,
+          },
         },
       };
     } catch (error) {
       await transaction.rollback();
       console.error("Error in recordCarPaymentExpense:", {
         message: error.message,
+        stack: error.stack,
         payload: paymentData,
       });
       throw error;
@@ -301,7 +365,7 @@ class CarsService {
       if (!carId) {
         throw new Error("Car ID is required");
       }
-  
+
       // Fetch car with detailed payment information
       const car = await Cars.findOne({
         where: { car_id: carId },
@@ -323,34 +387,35 @@ class CarsService {
             as: "assignedCompanies", // Matches your many-to-many association
             attributes: ["company_id", "company_name"],
             through: {
-              attributes: [] // Exclude junction table attributes
-            }
-          }
+              attributes: [], // Exclude junction table attributes
+            },
+          },
         ],
         attributes: {
           include: [
             [
-              sequelize.fn('COALESCE', 
-                sequelize.fn('SUM', sequelize.col('carPayments.amount')), 
+              sequelize.fn(
+                "COALESCE",
+                sequelize.fn("SUM", sequelize.col("carPayments.amount")),
                 0
               ),
-              'totalPayments'
-            ]
-          ]
+              "totalPayments",
+            ],
+          ],
         },
         // Simplified group by clause
         group: [
-          'Cars.car_id', 
-          'carPayments.payment_id', 
-          'assignedCompanies.company_id', 
-          'assignedCompanies.company_name'
-        ]
+          "Cars.car_id",
+          "carPayments.payment_id",
+          "assignedCompanies.company_id",
+          "assignedCompanies.company_name",
+        ],
       });
-  
+
       if (!car) {
         throw new Error("Car not found");
       }
-  
+
       // Transform car data
       const carData = car.get({ plain: true });
       console.log(carData);
@@ -362,16 +427,16 @@ class CarsService {
           amount: parseFloat(payment.amount),
           payment_date: new Date(payment.payment_date),
         })),
-        companies: (carData.assignedCompanies || []).map(company => ({
+        companies: (carData.assignedCompanies || []).map((company) => ({
           company_id: company.company_id,
-          company_name: company.company_name
-        }))
+          company_name: company.company_name,
+        })),
       };
     } catch (error) {
       console.error("Error in getCarWithPaymentsDetail:", {
         carId,
         errorMessage: error.message,
-        stack: error.stack
+        stack: error.stack,
       });
       throw error;
     }
@@ -439,12 +504,27 @@ class CarsService {
   static async deleteCar(carId) {
     const transaction = await sequelize.transaction();
     try {
-      // Find the car with all its payments
+      // Input validation
+      if (!carId) {
+        throw new Error("Car ID is required");
+      }
+
+      // Find the car with all its associated records
       const car = await Cars.findByPk(carId, {
         include: [
           {
             model: CarPayments,
-            as: "payments",
+            as: "carPayments",
+          },
+          {
+            model: CarExpenseStats,
+            as: "carExpenses",
+          },
+          {
+            model: PaymentHistory,
+            as: "carTransactions",
+            where: { transaction_source: "CAR", reference_source_id: carId },
+            required: false,
           },
         ],
         transaction,
@@ -454,30 +534,104 @@ class CarsService {
         throw new Error("Car not found");
       }
 
-      // Calculate total expenses to be removed
-      const totalExpenses = car.payments
-        .filter((payment) => payment.payment_type === "advance")
-        .reduce((total, payment) => total + parseFloat(payment.amount), 0);
+      const totalExpenses =
+        car.carPayments
+          .filter((payment) => payment.payment_type === "advance")
+          .reduce((total, payment) => total + parseFloat(payment.amount), 0) ||
+        0;
 
-      // Update Company Stats
-      await CompanyStats.decrement("total_expenses", {
-        by: totalExpenses,
-        where: { id: 1 },
-        transaction,
-      });
+      // Delete all associated records
+      await Promise.all([
+        // Delete payment history records
+        PaymentHistory.destroy({
+          where: {
+            transaction_source: "CAR",
+            reference_source_id: carId,
+          },
+          transaction,
+        }),
 
+        // Delete car expense stats
+        CarExpenseStats.destroy({
+          where: { car_id: carId },
+          transaction,
+        }),
+
+        // Delete car payments
+        CarPayments.destroy({
+          where: { car_id: carId },
+          transaction,
+        }),
+      ]);
+
+      // Update company stats
+      if (totalExpenses > 0) {
+        await CompanyStats.decrement("total_expenses", {
+          by: totalExpenses,
+          where: { id: 1 },
+          transaction,
+        });
+
+        // You might want to update monthly/yearly stats as well
+        await this.updateMonthlyStats(transaction);
+      }
+
+      // Delete the car
       await car.destroy({ transaction });
+
+      // Clear cache
       await this.clearCarCache(carId);
+
       await transaction.commit();
 
       return {
         status: "success",
         message: "Car deleted successfully",
+        data: {
+          carId,
+          totalExpensesRemoved: totalExpenses,
+          deletedAssociations: {
+            payments: car.carPayments.length,
+            expenses: car.carExpenses ? car.carExpenses.length : 0,
+            transactions: car.paymentHistory ? car.paymentHistory.length : 0,
+          },
+        },
       };
     } catch (error) {
       await transaction.rollback();
-      throw error;
+      console.error("Error in deleteCar:", {
+        message: error.message,
+        stack: error.stack,
+        carId,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw new Error(`Failed to delete car: ${error.message}`);
     }
+  }
+
+  // Helper method to update monthly stats (if needed)
+  static async updateMonthlyStats(transaction) {
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1;
+    const currentYear = currentDate.getFullYear();
+
+    // Recalculate monthly stats
+    const monthlyExpenses = await CarExpenseStats.sum("amount", {
+      where: {
+        month: currentMonth,
+        year: currentYear,
+      },
+      transaction,
+    });
+
+    await CompanyStats.update(
+      { monthly_expenses: monthlyExpenses || 0 },
+      {
+        where: { id: 1 },
+        transaction,
+      }
+    );
   }
 
   static async assignCarToCompany(carId, companyIds) {
@@ -615,24 +769,270 @@ class CarsService {
   static async updateCarPayment(paymentId, updateData) {
     const transaction = await sequelize.transaction();
     try {
-      const payment = await CarPayments.findByPk(paymentId, {
+      // Find the existing payment with associated data
+      const existingPayment = await CarPayments.findByPk(paymentId, {
         transaction,
+        include: [
+          {
+            model: PaymentHistory,
+            as: "transactionHistory",
+            where: { transaction_source: "CAR" },
+            required: false,
+          },
+        ],
       });
-      if (!payment) {
+
+      if (!existingPayment) {
         throw new Error("Payment not found");
       }
-      await payment.update(updateData, { transaction });
+
+      // Prepare update data
+      const updatedAmount = updateData.amount
+        ? parseFloat(updateData.amount)
+        : existingPayment.amount;
+      const updatedPaymentDate = updateData.payment_date
+        ? new Date(updateData.payment_date)
+        : existingPayment.payment_date;
+      const updatedPaymentType =
+        updateData.payment_type || existingPayment.payment_type;
+
+      // Update Payment Record
+      const updatedPayment = await existingPayment.update(
+        {
+          amount: updatedAmount,
+          payment_date: updatedPaymentDate,
+          payment_type: updatedPaymentType,
+          notes: updateData.notes || existingPayment.notes,
+        },
+        { transaction }
+      );
+
+      // Update or Create Transaction History
+      let transactionRecord;
+      if (
+        existingPayment.transactionHistory &&
+        existingPayment.transactionHistory.length > 0
+      ) {
+        // Update existing transaction history
+        transactionRecord = await existingPayment.transactionHistory[0].update(
+          {
+            amount: updatedAmount,
+            transaction_date: updatedPaymentDate,
+            metadata: {
+              ...existingPayment.transactionHistory[0].metadata,
+              payment_type: updatedPaymentType,
+              month: updatedPaymentDate.getMonth() + 1,
+              year: updatedPaymentDate.getFullYear(),
+              payment_date: updatedPaymentDate.toISOString(),
+            },
+          },
+          { transaction }
+        );
+      } else {
+        // Create new transaction history if not exists
+        transactionRecord = await PaymentHistory.create(
+          {
+            transaction_type: "EXPENSE_CAR_ADVANCE",
+            amount: updatedAmount,
+            reference_id: paymentId.toString(),
+            transaction_date: updatedPaymentDate,
+            description: `Advance payment for car ${existingPayment.car_id}`,
+            transaction_source: "CAR",
+            reference_source_id: existingPayment.car_id,
+            metadata: {
+              car_id: existingPayment.car_id,
+              payment_type: updatedPaymentType,
+              month: updatedPaymentDate.getMonth() + 1,
+              year: updatedPaymentDate.getFullYear(),
+              payment_date: updatedPaymentDate.toISOString(),
+            },
+          },
+          { transaction }
+        );
+      }
+
+      // Detailed Total Expense Calculation
+      const month = updatedPaymentDate.getMonth() + 1;
+      const year = updatedPaymentDate.getFullYear();
+
+      // Find all expense entries for this car in the same month and year
+      const monthlyExpenses = await CarExpenseStats.findAll({
+        where: {
+          car_id: existingPayment.car_id,
+          month: month,
+          year: year,
+        },
+        order: [["createdAt", "ASC"]],
+        transaction,
+      });
+
+      console.log("Monthly Expenses:", monthlyExpenses);
+
+      // Calculate cumulative expenses up to the current month
+      const previousMonthExpenses = await CarExpenseStats.findAll({
+        where: {
+          car_id: existingPayment.car_id,
+          [Op.or]: [
+            { year: { [Op.lt]: year } },
+            {
+              year: year,
+              month: { [Op.lt]: month },
+            },
+          ],
+        },
+        order: [
+          ["year", "ASC"],
+          ["month", "ASC"],
+        ],
+        transaction,
+      });
+
+      // Calculate cumulative expenses from previous months
+      let cumulativeTotalExpense = previousMonthExpenses.reduce(
+        (sum, entry) => sum + parseFloat(entry.amount || 0),
+        0
+      );
+
+      // Find the existing expense entry for this payment
+      const existingExpenseEntry = monthlyExpenses.find(
+        (entry) =>
+          entry.additional_details &&
+          entry.additional_details.payment_id === paymentId.toString()
+      );
+
+      // Calculate total monthly expense including all entries
+      let totalMonthlyExpense = monthlyExpenses.reduce(
+        (sum, entry) => sum + parseFloat(entry.amount || 0),
+        0
+      );
+
+      // Calculate amount difference
+      const amountDifference =
+        updatedAmount -
+        (existingExpenseEntry ? existingExpenseEntry.amount : 0);
+
+      // Update total monthly and cumulative expenses
+      totalMonthlyExpense += amountDifference;
+      cumulativeTotalExpense += amountDifference;
+
+      if (existingExpenseEntry) {
+        // Update existing expense entry
+        await existingExpenseEntry.update(
+          {
+            amount: updatedAmount,
+            total_expense: cumulativeTotalExpense,
+            description: updateData.notes || existingExpenseEntry.description,
+            additional_details: {
+              ...existingExpenseEntry.additional_details,
+              payment_type: updatedPaymentType,
+              original_amount: existingExpenseEntry.amount,
+              adjustment: amountDifference,
+            },
+          },
+          { transaction }
+        );
+      } else {
+        // Create new expense entry only if no existing entry found
+        await CarExpenseStats.create(
+          {
+            car_id: existingPayment.car_id,
+            category: "ADVANCE",
+            amount: updatedAmount,
+            total_expense: cumulativeTotalExpense,
+            month: month,
+            year: year,
+            description:
+              updateData.notes ||
+              `Updated advance payment for car ${existingPayment.car_id}`,
+            additional_details: {
+              payment_id: paymentId.toString(),
+              payment_type: updatedPaymentType,
+              adjustment: amountDifference,
+            },
+          },
+          { transaction }
+        );
+      }
+
+      // Recalculate cumulative expenses for future months
+      await this.recalculateCumulativeExpenses(
+        existingPayment.car_id,
+        month,
+        year,
+        transaction
+      );
+
       await transaction.commit();
+
       return {
         status: "success",
         message: "Payment updated successfully",
-        data: payment,
+        data: {
+          payment: updatedPayment,
+          totalMonthlyExpense: totalMonthlyExpense,
+          cumulativeTotalExpense: cumulativeTotalExpense,
+          amountDifference: amountDifference,
+        },
       };
     } catch (error) {
       await transaction.rollback();
+      console.error("Error in updateCarPayment:", {
+        message: error.message,
+        stack: error.stack,
+        paymentId,
+        updateData,
+      });
       throw error;
     }
   }
+
+  // Modify the recalculateCumulativeExpenses method
+  static async recalculateCumulativeExpenses(
+    carId,
+    startMonth,
+    startYear,
+    transaction
+  ) {
+    const { Op } = require("sequelize");
+
+    // Find all expense entries after the updated month, ordered by year and month
+    const futureExpenses = await CarExpenseStats.findAll({
+      where: {
+        car_id: carId,
+        [Op.or]: [
+          { year: { [Op.gt]: startYear } },
+          {
+            year: startYear,
+            month: { [Op.gt]: startMonth },
+          },
+        ],
+      },
+      order: [
+        ["year", "ASC"],
+        ["month", "ASC"],
+      ],
+      transaction,
+    });
+
+    // Calculate cumulative expenses
+    let cumulativeTotalExpense =
+      await CarExpenseStats.calculateCumulativeExpenses(
+        carId,
+        startMonth,
+        startYear
+      );
+
+    // Update future expense entries
+    for (const expense of futureExpenses) {
+      cumulativeTotalExpense += parseFloat(expense.amount || 0);
+
+      await expense.update(
+        { total_expense: cumulativeTotalExpense },
+        { transaction }
+      );
+    }
+  }
+  // Add this method to your CarExpenseStats model
 }
 
 module.exports = CarsService;

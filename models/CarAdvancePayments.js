@@ -84,18 +84,16 @@ module.exports = (sequelize, DataTypes) => {
           }
         },
 
-/*************  ✨ Codeium Command ⭐  *************/
-/**
- * Hook executed after bulk deletion of car payments.
- * If the deletion involves payments associated with a specific car_id,
- * it calculates the total amount of 'advance' payments that were deleted
- * and decrements the total expenses in CompanyStats by that amount.
- *
- * @param {Object} options - Sequelize options object containing conditions for deletion.
- * @param {Object} options.transaction - The transaction object for Sequelize operations.
- */
+        /**
+         * Hook executed after bulk deletion of car payments.
+         * If the deletion involves payments associated with a specific car_id,
+         * it calculates the total amount of 'advance' payments that were deleted
+         * and decrements the total expenses in CompanyStats by that amount.
+         *
+         * @param {Object} options - Sequelize options object containing conditions for deletion.
+         * @param {Object} options.transaction - The transaction object for Sequelize operations.
+         */
 
-/******  8865831e-4db6-4758-9d1f-37fbcdc9a123  *******/
         afterBulkDestroy: async (options) => {
           const { where } = options;
 
@@ -123,6 +121,18 @@ module.exports = (sequelize, DataTypes) => {
       },
     }
   );
+
+  CarPayments.associate = (models) => {
+    // Association with TransactionHistory
+    CarPayments.hasOne(models.TransactionHistory, {
+      foreignKey: {
+        name: "payment_id",
+        allowNull: true,
+      },
+      as: "transactionHistory",
+      constraints: false,
+    });
+  };
 
   return CarPayments;
 };

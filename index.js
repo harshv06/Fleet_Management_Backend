@@ -11,6 +11,8 @@ const InventoryRouter = require("./routes/InventoryRoutes");
 const CarsCompanyRouter = require("./routes/CarsCompanyRoutes");
 const AuthRouter = require("./routes/AuthRoutes");
 const InvoiceRouter = require("./routes/InvoiceRoutes");
+const PurchaseInvoiceRouter = require("./routes/PurchaseInvoiceRoutes");
+const DayBookRouter=require("./routes/DayBook/DayBookRoutes")
 // const { Sequelize, DataTypes } = require('sequelize');
 
 const app = express();
@@ -30,6 +32,8 @@ app.use("/api", InventoryRouter);
 app.use("/api", CarsCompanyRouter);
 app.use("/api", AuthRouter);
 app.use("/api", InvoiceRouter);
+app.use("/api", PurchaseInvoiceRouter);
+app.use("/api", DayBookRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

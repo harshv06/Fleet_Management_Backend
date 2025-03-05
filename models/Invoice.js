@@ -62,6 +62,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM("pending", "paid", "overdue", "cancelled"),
         defaultValue: "pending",
       },
+      amount_paid: {
+        type: DataTypes.DECIMAL(10, 2),
+        defaultValue: 0,
+      },
+      remaining_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        defaultValue: 0,
+      },
+      payment_status: {
+        type: DataTypes.ENUM("unpaid", "partially_paid", "fully_paid"),
+        defaultValue: "unpaid",
+      },
     },
     {
       tableName: "invoices",

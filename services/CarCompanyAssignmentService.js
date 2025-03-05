@@ -19,7 +19,6 @@ class CompanyCarsService {
             [Op.in]: companyIds,
           },
         },
-        as: "Company",
         transaction,
       });
 
@@ -27,26 +26,76 @@ class CompanyCarsService {
         throw new Error("Some companies do not exist");
       }
 
-      // Remove existing assignments
-      await CompanyCars.destroy({
-        where: { car_id: carId },
+      // Get current active assignments
+      const currentAssignments = await CompanyCars.findAll({
+        where: {
+          car_id: carId,
+          status: "active",
+        },
         transaction,
       });
 
-      // Create new assignments
-      const assignments = companyIds.map((companyId) => ({
-        car_id: carId,
-        company_id: companyId,
-        assignment_date: new Date(),
-        status: "active",
-      }));
+      // Deactivate current assignments that are not in the new list
+      const currentAssignmentIds = currentAssignments.map((a) => a.company_id);
+      const assignmentsToDeactivate = currentAssignmentIds.filter(
+        (id) => !companyIds.includes(id)
+      );
 
-      const createdAssignments = await CompanyCars.bulkCreate(assignments, {
-        transaction,
-      });
+      if (assignmentsToDeactivate.length > 0) {
+        await CompanyCars.update(
+          {
+            status: "inactive",
+            unassignment_date: new Date(),
+          },
+          {
+            where: {
+              car_id: carId,
+              company_id: assignmentsToDeactivate,
+              status: "active",
+            },
+            transaction,
+          }
+        );
+      }
+
+      // Create new assignments or reactivate inactive ones
+      const assignments = await Promise.all(
+        companyIds.map(async (companyId) => {
+          const existingAssignment = await CompanyCars.findOne({
+            where: { car_id: carId, company_id: companyId },
+            transaction,
+          });
+
+          if (existingAssignment) {
+            // Reactivate if inactive
+            if (existingAssignment.status === "inactive") {
+              await existingAssignment.update(
+                {
+                  status: "active",
+                  assignment_date: new Date(),
+                  unassignment_date: null,
+                },
+                { transaction }
+              );
+            }
+            return existingAssignment;
+          } else {
+            // Create new assignment
+            return CompanyCars.create(
+              {
+                car_id: carId,
+                company_id: companyId,
+                assignment_date: new Date(),
+                status: "active",
+              },
+              { transaction }
+            );
+          }
+        })
+      );
 
       await transaction.commit();
-      return createdAssignments;
+      return assignments;
     } catch (error) {
       await transaction.rollback();
       throw error;
@@ -58,7 +107,7 @@ class CompanyCarsService {
       const assignedCompanies = await CompanyCars.findAll({
         where: {
           car_id: carId,
-          status: "active",
+          status: "active", // Only get active assignments
         },
         include: [
           {
@@ -79,7 +128,7 @@ class CompanyCarsService {
       return assignedCompanies.map((assignment) => ({
         company_id: assignment.company_id,
         company_name: assignment.companyCarsCompany.company_name,
-        registration_number: assignment.companyCarsCompany.registration_number,
+        gst_number: assignment.companyCarsCompany.gst_number,
         email: assignment.companyCarsCompany.email,
         phone: assignment.companyCarsCompany.phone,
         status: assignment.status,
@@ -92,21 +141,27 @@ class CompanyCarsService {
 
   async getAvailableCompanies(carId) {
     try {
-      // Get companies not already assigned to this car
-      const assignedCompanyIds = await CompanyCars.findAll({
-        where: { car_id: carId },
-        as: "Company",
+      // Get currently active assignments for this car
+      const activeAssignments = await CompanyCars.findAll({
+        where: {
+          car_id: carId,
+          status: "active",
+        },
         attributes: ["company_id"],
       });
 
-      const excludedIds = assignedCompanyIds.map((a) => a.company_id);
+      const assignedCompanyIds = activeAssignments.map((a) => a.company_id);
 
+      // Get all companies that are not currently actively assigned
       const availableCompanies = await Company.findAll({
         where: {
           company_id: {
-            [Op.notIn]: excludedIds.length > 0 ? excludedIds : [0],
+            [Op.notIn]:
+              assignedCompanyIds.length > 0 ? assignedCompanyIds : [0],
           },
-          status: "active",
+          status: {
+            [Op.in]: ["active", "inactive"], // Get both active and inactive companies
+          },
         },
         attributes: [
           "company_id",
@@ -116,10 +171,15 @@ class CompanyCarsService {
           "phone",
           "status",
         ],
+        order: [
+          ["status", "ASC"],
+          ["company_name", "ASC"],
+        ],
       });
-      console.log("Companies:", availableCompanies);
+
       return availableCompanies;
     } catch (error) {
+      console.error("Error in getAvailableCompanies:", error);
       throw error;
     }
   }
@@ -137,10 +197,10 @@ class CompanyCarsService {
       });
 
       if (!assignment) {
-        throw new Error("Company assignment not found");
+        throw new Error("Active company assignment not found");
       }
 
-      // Update the status to inactive instead of deleting
+      // Update the status to inactive
       await assignment.update(
         {
           status: "inactive",
@@ -150,7 +210,14 @@ class CompanyCarsService {
       );
 
       await transaction.commit();
-      return { success: true, message: "Company unassigned successfully" };
+      return {
+        success: true,
+        message: "Company unassigned successfully",
+        unassignedCompany: {
+          company_id: companyId,
+          unassignment_date: new Date(),
+        },
+      };
     } catch (error) {
       await transaction.rollback();
       throw error;

@@ -1,7 +1,7 @@
 // middleware/authMiddleware.js
 const jwt = require("jsonwebtoken");
 const { User } = require("../models/index");
-const { PERMISSIONS,ROLE_PERMISSIONS } = require("../utils/Permissions");
+const { PERMISSIONS, ROLE_PERMISSIONS } = require("../utils/Permissions");
 
 const checkPermission = (requiredPermission) => {
   return async (req, res, next) => {
@@ -17,11 +17,11 @@ const checkPermission = (requiredPermission) => {
       }
 
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || "MATOSHREE");
+      // console.log("req.user", decoded);
 
       // Attach user to request
       req.user = decoded;
-
       // Check if user has required permission
       if (!decoded.permissions.includes(requiredPermission)) {
         return res.status(403).json({
@@ -67,8 +67,8 @@ const validateToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
 
     // Detailed logging of incoming request
-    console.log("Authorization Header:", authHeader);
-    console.log("Request Headers:", req.headers);
+    // console.log("Authorization Header:", authHeader);
+    // console.log("Request Headers:", req.headers);
 
     // Check if authorization header exists
     if (!authHeader) {
@@ -122,7 +122,7 @@ const validateToken = async (req, res, next) => {
     }
 
     // Log decoded token
-    console.log("Decoded Token:", decoded);
+    // console.log("Decoded Token:", decoded);
 
     // Validate decoded token structure
     if (!decoded || !decoded.id) {

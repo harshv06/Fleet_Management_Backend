@@ -2,6 +2,7 @@ const { PaymentHistory, Invoice, Company, Payment } = require("../../models");
 const InventoryService = require("../../services/InventoryService");
 const sequelize = require("sequelize");
 const { Op } = require("sequelize");
+const TransactionTrackingService = require("../../services/TransactionService");
 
 class InventoryController {
   static async getCompanyStats(req, res) {
@@ -21,18 +22,37 @@ class InventoryController {
     }
   }
 
-  static async getFinancialDashboard(req, res) {
+  static async getDashboardData(req, res) {
     try {
-      const { timeframe = "monthly" } = req.query;
-      const dashboardData = await InventoryService.getFinancialDashboard(
-        timeframe
-      );
-      res.json(dashboardData);
+      const { timeframe } = req.query;
+      const data = await TransactionTrackingService.getDashboardData(timeframe);
+
+      res.json({
+        status: "success",
+        data: {
+          revenue: {
+            total: data.revenue.reduce(
+              (sum, r) => sum + parseFloat(r.total),
+              0
+            ),
+            breakdown: data.revenue,
+          },
+          expenses: {
+            total: data.expenses.reduce(
+              (sum, e) => sum + parseFloat(e.total),
+              0
+            ),
+            breakdown: data.expenses,
+          },
+          companyStats: data.companyStats,
+          carStats: data.carStats,
+        },
+      });
     } catch (error) {
-      console.error("Financial Dashboard Error:", error);
+      console.error("Dashboard data error:", error);
       res.status(500).json({
-        message: "Failed to retrieve financial dashboard",
-        error: error.message,
+        status: "error",
+        message: "Failed to fetch dashboard data",
       });
     }
   }

@@ -20,6 +20,56 @@ class InvoiceController {
     }
   }
 
+  static async recordPayment(req, res) {
+    try {
+      const { invoiceId } = req.params;
+      const { amount, payment_method } = req.body;
+
+      // Validate input
+      if (!amount || amount <= 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid payment amount'
+        });
+      }
+
+      const result = await InvoiceService.recordPayment(
+        invoiceId,
+        amount,
+        payment_method
+      );
+
+      // Fetch updated invoice with all related data
+      const updatedInvoice = await Invoice.findByPk(invoiceId, {
+        include: [
+          {
+            model: Company,
+            as: 'invoiceCompany',
+          },
+          {
+            model: InvoiceItems,
+            as: 'invoiceItems'
+          },
+          {
+            model: PaymentHistory,
+            as: 'payments',
+            attributes: ['amount', 'transaction_date', 'payment_method']
+          }
+        ]
+      });
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Payment recorded successfully',
+        data: updatedInvoice
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  }
   // Get All Invoices
   static async getAllInvoices(req, res) {
     try {
@@ -52,6 +102,7 @@ class InvoiceController {
       });
     }
   }
+
 
   // Update Invoice Status
   static async updateInvoiceStatus(req, res) {
@@ -98,6 +149,44 @@ class InvoiceController {
         success: false,
         message: "Failed to fetch invoice",
         error: error.message,
+      });
+    }
+  }
+
+  static async getInvoiceDetails(req, res) {
+    try {
+      const { invoiceId } = req.params;
+      const invoice = await InvoiceService.getInvoiceById(invoiceId);
+      
+      res.status(200).json({
+        status: 'success',
+        data: { invoice }
+      });
+    } catch (error) {
+      res.status(404).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  }
+
+  static async downloadInvoicePDF(req, res) {
+    try {
+      const { invoiceId } = req.params;
+      const pdfPath = await InvoiceService.generateInvoicePDF(invoiceId);
+      
+      res.download(pdfPath, `Invoice_${invoiceId}.pdf`, (err) => {
+        if (err) {
+          res.status(500).json({
+            status: 'error',
+            message: 'Could not download the file'
+          });
+        }
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message
       });
     }
   }

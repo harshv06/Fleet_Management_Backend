@@ -10,6 +10,8 @@ const {
   paymentCacheMiddleware,
   AdvancepaymentCacheMiddleware,
 } = require("../middlewares/cacheMiddleware");
+const { validateToken, checkPermission } = require("../middlewares/authMiddleware");
+const { PERMISSIONS } = require("../utils/Permissions");
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -25,6 +27,8 @@ const CACHE_DURATIONS = {
 router.get(
   "/cars",
   apiLimiter,
+  validateToken,
+  checkPermission(PERMISSIONS.CARS.VIEW),
   carCacheMiddleware(CACHE_DURATIONS.SHORT),
   CarsController.getAllCars
 );

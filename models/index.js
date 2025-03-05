@@ -14,6 +14,13 @@ const UserModel = require("./Users");
 const RolesModel = require("./Roles");
 const InvoiceModel = require("./Invoice");
 const InvoiceItemsModel = require("./InvoiceItems");
+const CarExpenseStatsModel = require("./ExpenseStats");
+const PurchaseInvoiceModel = require("./PurchaseInvoice");
+const PurchaseInvoiceItemModel = require("./PurchaseInvoiceItem");
+const PurchaseTransactionModel = require("./PurchaseTransactions");
+const DayBookModel = require("./DayBook/DayBook");
+const MonthlyBalanceModel = require("./DayBook/MonthlyBalance");
+const OpeningBalanceModel=require("./DayBook/OpeningBalance")
 
 // Initialize models
 const Company = CompanyModel(sequelize, DataTypes);
@@ -27,6 +34,13 @@ const User = UserModel(sequelize, DataTypes);
 const Role = RolesModel(sequelize, DataTypes);
 const Invoice = InvoiceModel(sequelize, DataTypes);
 const InvoiceItems = InvoiceItemsModel(sequelize, DataTypes);
+const CarExpenseStats = CarExpenseStatsModel(sequelize, DataTypes);
+const PurchaseInvoice = PurchaseInvoiceModel(sequelize, DataTypes);
+const PurchaseInvoiceItem = PurchaseInvoiceItemModel(sequelize, DataTypes);
+const PurchaseTransaction = PurchaseTransactionModel(sequelize, DataTypes);
+const DayBook = DayBookModel(sequelize, DataTypes);
+const MonthlyBalance = MonthlyBalanceModel(sequelize, DataTypes);
+const OpeningBalance=OpeningBalanceModel(sequelize,DataTypes)
 
 // Comprehensive Associations
 
@@ -145,11 +159,119 @@ Company.hasMany(CompanyStats, {
   as: "companyStats",
 });
 
-// Remove duplicate associations
-// Company.associate = (models) => {
-//   // Remove this block as it's redundant
-// };
+// 10. CarPayments and TransactionHistory Associations
+CarPayments.hasOne(PaymentHistory, {
+  foreignKey: {
+    name: "payment_id",
+    allowNull: true,
+  },
+  as: "transactionHistory",
+  constraints: false,
+  scope: {
+    transaction_source: "CAR",
+  },
+});
 
+PaymentHistory.belongsTo(CarPayments, {
+  foreignKey: "payment_id",
+  as: "carPayment",
+  constraints: false,
+  scope: {
+    transaction_source: "CAR",
+  },
+});
+
+Cars.hasMany(PaymentHistory, {
+  foreignKey: "reference_source_id",
+  constraints: false,
+  scope: {
+    transaction_source: "CAR",
+  },
+  as: "carTransactions",
+});
+
+PaymentHistory.belongsTo(Cars, {
+  foreignKey: "reference_source_id",
+  constraints: false,
+  scope: {
+    transaction_source: "CAR",
+  },
+  as: "car",
+});
+
+// Cars and CarExpenseStats Associations
+Cars.hasMany(CarExpenseStats, {
+  foreignKey: "car_id",
+  as: "carExpenses",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+CarExpenseStats.belongsTo(Cars, {
+  foreignKey: "car_id",
+  as: "car",
+});
+
+// Optional: Add association between CarPayments and CarExpenseStats if needed
+CarPayments.hasMany(CarExpenseStats, {
+  foreignKey: "car_id",
+  as: "expenseStats",
+  constraints: false,
+});
+
+CarExpenseStats.belongsTo(CarPayments, {
+  foreignKey: "car_id",
+  as: "payment",
+  constraints: false,
+});
+
+// Set up associations
+// Replace the existing PurchaseInvoice and PurchaseTransaction associations with these:
+
+// PurchaseInvoice Associations
+PurchaseInvoice.belongsTo(Company, {
+  foreignKey: "vendor_id", // This should match the column in purchase_invoices table
+  as: "vendor",
+});
+
+Company.hasMany(PurchaseInvoice, {
+  foreignKey: "vendor_id",
+  as: "vendorPurchases",
+});
+
+// PurchaseInvoice and PurchaseInvoiceItem Associations
+PurchaseInvoice.hasMany(PurchaseInvoiceItem, {
+  foreignKey: "purchase_invoice_id",
+  as: "items",
+  onDelete: "CASCADE",
+});
+
+PurchaseInvoiceItem.belongsTo(PurchaseInvoice, {
+  foreignKey: "purchase_invoice_id",
+  as: "invoice",
+});
+
+// PurchaseTransaction Associations
+PurchaseTransaction.belongsTo(Company, {
+  foreignKey: "vendor_id",
+  as: "vendor",
+});
+
+Company.hasMany(PurchaseTransaction, {
+  foreignKey: "vendor_id",
+  as: "vendorTransactions",
+});
+
+PurchaseTransaction.belongsTo(PurchaseInvoice, {
+  foreignKey: "purchase_invoice_id",
+  as: "invoice",
+});
+
+PurchaseInvoice.hasMany(PurchaseTransaction, {
+  foreignKey: "purchase_invoice_id",
+  as: "transactions",
+});
+// PaymentHistory.belongsTo
 // Optional: Add Scopes or Additional Configuration
 Company.addScope("withInvoices", {
   include: [
@@ -185,4 +307,11 @@ module.exports = {
   Role,
   Invoice,
   InvoiceItems,
+  CarExpenseStats,
+  PurchaseInvoice,
+  PurchaseInvoiceItem,
+  PurchaseTransaction,
+  DayBook,
+  MonthlyBalance,
+  OpeningBalance
 };

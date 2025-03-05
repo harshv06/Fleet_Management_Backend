@@ -46,15 +46,26 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   User.initialize = async function () {
-    const existingUser = await this.findOne();
-    if (!existingUser) {
-      await this.create({
-        username: "admin",
-        email: "admin@example.com",
-        password: "123",
-        role: "SUPER_ADMIN",
-        is_active: true,
+    try {
+      console.log("SUPER_ADMIN user created successfully");
+      const existingUser = await this.findOne({
+        where: {
+          role: "SUPER_ADMIN",
+        },
       });
+      if (!existingUser) {
+        await this.create({
+          username: "admin",
+          email: "admin@gmail.com",
+          password: "123", // This will be hashed by the hook
+          role: "SUPER_ADMIN",
+          is_active: true,
+        });
+
+        console.log("SUPER_ADMIN user created successfully");
+      }
+    } catch (e) {
+      console.log("Error creating SUPER_ADMIN user:", e.message);
     }
   };
 

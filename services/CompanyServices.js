@@ -289,6 +289,7 @@ exports.addCompany = async (companyData) => {
         "status",
         "created_at",
         "updated_at",
+        "client_type",
       ],
     });
 
@@ -320,6 +321,7 @@ exports.updateCompany = async (id, companyData) => {
         "address",
         "status",
         "updated_at",
+        "client_type",
       ],
     });
 
@@ -452,16 +454,5 @@ exports.updatePaymentDetails = async (id, paymentData) => {
     return paymentWithDetails;
   } catch (error) {
     console.error("Error updating company:", error);
-  }
-};
-
-exports.deletePayment = async (id) => {
-  try {
-    const payment = await Payment.destroy({
-      where: { payment_id: id },
-    });
-    return payment;
-  } catch (error) {
-    console.error("Error deleting company:", error);
   }
 };
