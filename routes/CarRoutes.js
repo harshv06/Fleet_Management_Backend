@@ -10,7 +10,10 @@ const {
   paymentCacheMiddleware,
   AdvancepaymentCacheMiddleware,
 } = require("../middlewares/cacheMiddleware");
-const { validateToken, checkPermission } = require("../middlewares/authMiddleware");
+const {
+  validateToken,
+  checkPermission,
+} = require("../middlewares/authMiddleware");
 const { PERMISSIONS } = require("../utils/Permissions");
 
 const apiLimiter = rateLimit({
@@ -113,5 +116,13 @@ router.put(
   ]),
   CarsController.updateCarPayment
 );
+
+router.get("/salary-data", CarsController.getSalaryData);
+router.get("/:carId/advance-payments", CarsController.getAdvancePayments);
+router.post("/calculate-salary", CarsController.calculateSalary);
+router.post("/save-salary-calculation", CarsController.saveSalaryCalculation);
+
+
+// router.get('/cars/salary-data', apiLimiter, CarsController.getCarsSalaryData);
 
 module.exports = router;

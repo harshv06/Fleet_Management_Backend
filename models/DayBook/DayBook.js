@@ -8,6 +8,15 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
+      company_id: {
+        // Add this field
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "companies",
+          key: "company_id",
+        },
+      },
       transaction_date: {
         type: DataTypes.DATE,
         allowNull: false,

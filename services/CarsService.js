@@ -113,11 +113,22 @@ class CarsService {
     try {
       const car = await Cars.findByPk(id, {
         attributes: [
-          "car_id", "car_name", "car_model", "induction_date",
-          "type_of_car", "driver_name", "driver_number",
-          "owner_name", "owner_number", "owner_account_number",
-          "ifsc_code", "address", "payment_type", "per_trip_amount",
-          "monthly_package_rate", "status"
+          "car_id",
+          "car_name",
+          "car_model",
+          "induction_date",
+          "type_of_car",
+          "driver_name",
+          "driver_number",
+          "owner_name",
+          "owner_number",
+          "owner_account_number",
+          "ifsc_code",
+          "address",
+          "payment_type",
+          "per_trip_amount",
+          "monthly_package_rate",
+          "status",
         ],
         include: [
           {
@@ -130,15 +141,15 @@ class CarsService {
           [{ model: CarPayments, as: "carPayments" }, "payment_date", "DESC"],
         ],
       });
-  
+
       if (!car) {
         throw new Error("Car not found");
       }
-  
+
       const totalPayments = await CarPayments.sum("amount", {
         where: { car_id: id },
       });
-  
+
       return {
         status: "success",
         data: {
@@ -1076,6 +1087,114 @@ class CarsService {
         paymentId,
         updateData,
       });
+      throw error;
+    }
+  }
+
+  static async getAdvancePayments(carId, days = 30) {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      const advances = await CarPayments.findAll({
+        where: {
+          car_id: carId,
+          payment_type: "advance",
+          payment_date: {
+            [Op.between]: [startDate, endDate],
+          },
+        },
+        attributes: [
+          [sequelize.fn("SUM", sequelize.col("amount")), "total_advance"],
+        ],
+        raw: true,
+      });
+
+      return advances[0]?.total_advance || 0;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async calculateSalary(salaryData) {
+    try {
+      const calculatedData = salaryData.map((car) => {
+        let grossAmount = 0;
+
+        if (car.payment_type === "TRIP_BASED") {
+          grossAmount = car.per_trip_amount * car.total_trips;
+        } else {
+          grossAmount = (car.monthly_package_rate / 30) * car.working_days;
+        }
+
+        const tdsAmount = (grossAmount * car.tds_percentage) / 100;
+        const holidayPenalty =
+          (grossAmount * car.holiday_penalty_percentage) / 100;
+        const otherPenalty = (grossAmount * car.other_penalty_percentage) / 100;
+        const totalDeductions =
+          tdsAmount +
+          holidayPenalty +
+          otherPenalty +
+          parseFloat(car.advance_amount || 0);
+
+        return {
+          ...car,
+          gross_amount: grossAmount,
+          tds_amount: tdsAmount,
+          holiday_penalty_amount: holidayPenalty,
+          other_penalty_amount: otherPenalty,
+          total_deductions: totalDeductions,
+          net_amount: grossAmount - totalDeductions,
+        };
+      });
+
+      return {
+        status: "success",
+        data: calculatedData,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async saveSalaryCalculation(salaryData) {
+    const transaction = await sequelize.transaction();
+    try {
+      const savedCalculations = await Promise.all(
+        salaryData.map(async (calculation) => {
+          const salaryRecord = await SalaryCalculations.create(
+            {
+              car_id: calculation.car_id,
+              calculation_date: new Date(),
+              gross_amount: calculation.gross_amount,
+              tds_percentage: calculation.tds_percentage,
+              tds_amount: calculation.tds_amount,
+              holiday_penalty_percentage:
+                calculation.holiday_penalty_percentage,
+              holiday_penalty_amount: calculation.holiday_penalty_amount,
+              other_penalty_percentage: calculation.other_penalty_percentage,
+              other_penalty_amount: calculation.other_penalty_amount,
+              advance_amount: calculation.advance_amount,
+              total_deductions: calculation.total_deductions,
+              net_amount: calculation.net_amount,
+              remarks: calculation.remarks,
+            },
+            { transaction }
+          );
+
+          return salaryRecord;
+        })
+      );
+
+      await transaction.commit();
+      return {
+        status: "success",
+        message: "Salary calculations saved successfully",
+        data: savedCalculations,
+      };
+    } catch (error) {
+      await transaction.rollback();
       throw error;
     }
   }

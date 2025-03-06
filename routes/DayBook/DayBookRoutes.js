@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const DayBookController = require("../../controllers/DayBook/DayBookController");
+const ReportController=require("../../controllers/DayBook/CategoryReportController")
 // const { authenticateToken } = require('../middleware/auth');
 
 // Apply authentication middleware to all routes
@@ -38,5 +39,7 @@ router.post(
 router.get("/daybook/opening-balance", DayBookController.getOpeningBalance); // Add the controller method
 router.post("/close-month/:year/:month", DayBookController.closeMonth);
 router.get("/daybook/export", DayBookController.exportToExcel);
+
+router.post('/daybook/category-transactions', ReportController.generateTransactionReport);
 
 module.exports = router;
