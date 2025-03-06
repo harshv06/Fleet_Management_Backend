@@ -1,3 +1,5 @@
+// const Cars = require("../../models/Cars");
+const {Cars} =require("../../models/index")
 const CarCompanyAssignmentService = require("../../services/CarCompanyAssignmentService");
 const CarsService = require("../../services/CarsService");
 
@@ -284,6 +286,64 @@ class CarsController {
         status: "error",
         message: error.message || "Failed to unassign companies",
       });
+    }
+  }
+
+  static async calculateSalary(req, res) {
+    try {
+      const { salaryData } = req.body;
+      const calculatedData = await CarsService.calculateSalary(salaryData);
+      res.json(calculatedData);
+    } catch (error) {
+      console.error("Error calculating salary:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+  static async getAdvancePayments(req, res) {
+    try {
+      const { carId } = req.params;
+      const totalAdvance = await CarsService.getAdvancePayments(carId, 30);
+      res.json({ total_advance: totalAdvance });
+    } catch (error) {
+      console.error("Error fetching advance payments:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  static async getSalaryData(req, res) {
+    try {
+      const cars = await Cars.findAll({
+        where: { status: "ACTIVE" },
+        attributes: [
+          "car_id",
+          "car_name",
+          "driver_name",
+          "driver_number",
+          "owner_name",
+          "owner_number",
+          "payment_type",
+          "per_trip_amount",
+          "monthly_package_rate",
+          "owner_account_number",
+          "ifsc_code",
+        ],
+      });
+
+      res.json(cars);
+    } catch (error) {
+      console.error("Error fetching salary data:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  static async saveSalaryCalculation(req, res) {
+    try {
+      const { salaryData } = req.body;
+      const result = await CarsService.saveSalaryCalculation(salaryData);
+      res.json(result);
+    } catch (error) {
+      console.error("Error saving salary calculation:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   }
 }

@@ -22,6 +22,9 @@ const DayBookModel = require("./DayBook/DayBook");
 const MonthlyBalanceModel = require("./DayBook/MonthlyBalance");
 const OpeningBalanceModel = require("./DayBook/OpeningBalance");
 const CategoryModel = require("./DayBook/Categories");
+const SalaryCalculationsModel = require("./SalaryCalculations/SalaryCalculations");
+const SalaryCalculationsHistoryModel = require("./SalaryCalculations/SalaryCalculationsHistory");
+const CarSalaryRecordModel = require("./SalaryCalculations/CarSalaryRecord");
 
 // Initialize models
 const Company = CompanyModel(sequelize, DataTypes);
@@ -43,6 +46,12 @@ const DayBook = DayBookModel(sequelize, DataTypes);
 const MonthlyBalance = MonthlyBalanceModel(sequelize, DataTypes);
 const OpeningBalance = OpeningBalanceModel(sequelize, DataTypes);
 const Category = CategoryModel(sequelize, DataTypes);
+const SalaryCalculations = SalaryCalculationsModel(sequelize, DataTypes);
+const SalaryCalculationsHistory = SalaryCalculationsHistoryModel(
+  sequelize,
+  DataTypes
+);
+const CarSalaryRecord = CarSalaryRecordModel(sequelize, DataTypes);
 
 // Comprehensive Associations
 
@@ -273,6 +282,34 @@ PurchaseInvoice.hasMany(PurchaseTransaction, {
   foreignKey: "purchase_invoice_id",
   as: "transactions",
 });
+
+SalaryCalculationsHistory.hasMany(CarSalaryRecord, {
+  foreignKey: "calculation_id",
+  sourceKey: "id",
+  as: "carSalaryRecords",
+});
+
+CarSalaryRecord.belongsTo(SalaryCalculationsHistory, {
+  foreignKey: "calculation_id",
+  targetKey: "id",
+  as: "calculation",
+});
+
+CarSalaryRecord.belongsTo(Cars, {
+  foreignKey: "car_id",
+  as: "car",
+});
+
+DayBook.belongsTo(Company, {
+  foreignKey: "company_id",
+  as: "company",
+});
+
+Company.hasMany(DayBook, {
+  foreignKey: "company_id",
+  as: "transactions",
+});
+
 // PaymentHistory.belongsTo
 // Optional: Add Scopes or Additional Configuration
 Company.addScope("withInvoices", {
@@ -316,5 +353,8 @@ module.exports = {
   DayBook,
   MonthlyBalance,
   OpeningBalance,
-  Category
+  Category,
+  SalaryCalculations,
+  SalaryCalculationsHistory,
+  CarSalaryRecord,
 };

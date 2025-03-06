@@ -1,7 +1,7 @@
 const { Sequelize,Op } = require("sequelize");
 // const { Op } = require("sequelize");
 
-const sequelize = new Sequelize("bill_management", "jaydeepw", "new_password", {
+const sequelize = new Sequelize("BILL_MANAGEMENT", "Harsh", "Harshv0624", {
   host: "localhost",
   dialect: "postgres",
   logging: (sql, timing) => {
