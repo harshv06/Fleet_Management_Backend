@@ -16,7 +16,7 @@ class SalaryCalculationService {
    * @returns {Promise<Object>} Created salary calculation record
    */
   static async create(calculationData) {
-    console.log(calculationData);
+    // console.log(calculationData);
     const transaction = await sequelize.transaction();
     try {
       // Validate the data
@@ -28,7 +28,7 @@ class SalaryCalculationService {
         throw new Error("Invalid calculation data");
       }
 
-      console.log(calculationData.calculation_data);
+      // console.log(calculationData.calculation_data);
       // Calculate total amount
       const totalAmount = calculationData.calculation_data.reduce(
         (sum, car) => sum + parseFloat(car.net_amount || 0),
@@ -56,7 +56,7 @@ class SalaryCalculationService {
       );
 
       await transaction.commit();
-      console.log("Salary calculation created successfully");
+      // console.log("Salary calculation created successfully");
       return {
         status: "success",
         data: {

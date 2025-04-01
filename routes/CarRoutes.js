@@ -41,6 +41,21 @@ router.get(
   carCacheMiddleware(CACHE_DURATIONS.SHORT),
   CarsController.getCarById
 );
+router.get(
+  "/cars/payments/detail/:carId",
+  apiLimiter,
+  AdvancepaymentCacheMiddleware(CACHE_DURATIONS.SHORT),
+  CarsController.getCarWithPaymentsDetail
+);
+router.get(
+  "/cars/payments/total",
+  apiLimiter,
+  cacheMiddleware(CACHE_DURATIONS.SHORT),
+  CarsController.getCarsWithTotalPayments
+);
+
+router.get("/salary-data", CarsController.getSalaryData);
+router.get("/:carId/advance-payments", CarsController.getAdvancePayments);
 router.post(
   "/cars/AddCar",
   apiLimiter,
@@ -48,23 +63,11 @@ router.post(
   CarsController.addCar
 );
 
-router.delete(
-  "/cars/delete/:carId",
+router.post(
+  "/cars/payments/from-daybook",
   apiLimiter,
-  clearCacheMiddleware([
-    "cars_list_",
-    "car_",
-    "car_payments_",
-    "dashboard_data_",
-  ]),
-  CarsController.deleteCar
-);
-
-router.put(
-  "/cars/update/:carId",
-  apiLimiter,
-  clearCacheMiddleware(["cars_list_", "car_", "dashboard_data_"]),
-  CarsController.updateCar
+  validateToken,
+  CarsController.createCarPaymentFromDaybook
 );
 
 router.post(
@@ -78,21 +81,20 @@ router.post(
   ]),
   CarsController.recordAdvanceCarPayment
 );
+router.post("/calculate-salary", CarsController.calculateSalary);
+router.post("/save-salary-calculation", CarsController.saveSalaryCalculation);
 
-router.get(
-  "/cars/payments/detail/:carId",
+router.delete(
+  "/cars/delete/:carId",
   apiLimiter,
-  AdvancepaymentCacheMiddleware(CACHE_DURATIONS.SHORT),
-  CarsController.getCarWithPaymentsDetail
+  clearCacheMiddleware([
+    "cars_list_",
+    "car_",
+    "car_payments_",
+    "dashboard_data_",
+  ]),
+  CarsController.deleteCar
 );
-
-router.get(
-  "/cars/payments/total",
-  apiLimiter,
-  cacheMiddleware(CACHE_DURATIONS.SHORT),
-  CarsController.getCarsWithTotalPayments
-);
-
 router.delete(
   "/cars/payments/delete/:paymentId",
   apiLimiter,
@@ -106,6 +108,13 @@ router.delete(
 );
 
 router.put(
+  "/cars/update/:carId",
+  apiLimiter,
+  clearCacheMiddleware(["cars_list_", "car_", "dashboard_data_"]),
+  CarsController.updateCar
+);
+
+router.put(
   "/cars/payments/update/:paymentId",
   apiLimiter,
   clearCacheMiddleware([
@@ -116,12 +125,6 @@ router.put(
   ]),
   CarsController.updateCarPayment
 );
-
-router.get("/salary-data", CarsController.getSalaryData);
-router.get("/:carId/advance-payments", CarsController.getAdvancePayments);
-router.post("/calculate-salary", CarsController.calculateSalary);
-router.post("/save-salary-calculation", CarsController.saveSalaryCalculation);
-
 
 // router.get('/cars/salary-data', apiLimiter, CarsController.getCarsSalaryData);
 

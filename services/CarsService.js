@@ -174,7 +174,7 @@ class CarsService {
       ];
 
       await cacheService.clearMultiplePatterns(patterns);
-      console.log("Car cache cleared successfully");
+      // console.log("Car cache cleared successfully");
     } catch (error) {
       console.error("Error clearing car cache:", error);
       throw error;
@@ -185,6 +185,7 @@ class CarsService {
     const transaction = await sequelize.transaction();
     try {
       // Input validation
+      // console.log(paymentData);
       if (!paymentData.car_id) {
         throw new Error("Car ID is required");
       }
@@ -196,7 +197,7 @@ class CarsService {
       const paymentDate = paymentData.payment_date
         ? new Date(paymentData.payment_date)
         : new Date();
-
+      console.log("Payment Date:", paymentDate);
       // Format amount to ensure it's a number
       const amount = parseFloat(paymentData.amount);
 
@@ -220,12 +221,14 @@ class CarsService {
         { transaction }
       );
 
+      console.log("Payment: ", payment);
+      console.log("Payment Data: ", paymentData);
       // Create transaction record
       const transactionRecord = await PaymentHistory.create(
         {
           transaction_type: "EXPENSE_CAR_ADVANCE",
           amount: amount,
-          reference_id: payment.payment_id.toString(),
+          reference_id: payment.payment_id,
           transaction_date: paymentDate,
           description: `Advance payment for car ${paymentData.car_id}`,
           transaction_source: "CAR",
@@ -274,7 +277,7 @@ class CarsService {
           additional_details: {
             payment_id: payment.payment_id,
             payment_type: payment.payment_type,
-            reference_id: transactionRecord.transaction_id,
+            reference_id: `CAR-${paymentData.car_id}-${transactionRecord.transaction_id}`,
           },
         },
         { transaction }
@@ -287,7 +290,7 @@ class CarsService {
         message: "Car payment expense recorded successfully",
         data: {
           payment: {
-            payment_id: payment.payment_id,
+            payment_id: `CAR-${paymentData.car_id}-${payment.payment_id}`,
             car_id: payment.car_id,
             amount: payment.amount,
             payment_type: payment.payment_type,
@@ -318,18 +321,18 @@ class CarsService {
   }
   static async getCarsWithTotalPayments() {
     const cacheKey = "cars_total_payments";
-    console.log("Checking cache for:", cacheKey);
+    // console.log("Checking cache for:", cacheKey);
     try {
       // Check cache with debug logging
-      console.log("Checking cache for:", cacheKey);
+      // console.log("Checking cache for:", cacheKey);
       const cachedResult = await cacheService.get(cacheKey);
 
       if (cachedResult) {
-        console.log("Cache hit for:", cachedResult);
+        // console.log("Cache hit for:", cachedResult);
         return cachedResult;
       }
 
-      console.log("Cache miss for:", cacheKey);
+      // console.log("Cache miss for:", cacheKey);
 
       // Fetch from database
       const cars = await Cars.findAll({
@@ -374,12 +377,12 @@ class CarsService {
       }));
 
       // Cache the result with debug logging
-      console.log("Setting cache for:", cacheKey);
+      // console.log("Setting cache for:", cacheKey);
       await cacheService.set(cacheKey, result, 300);
 
       // Verify cache was set
       const verifyCacheSet = await cacheService.get(cacheKey);
-      console.log("Cache verification:", verifyCacheSet ? "SUCCESS" : "FAILED");
+      // console.log("Cache verification:", verifyCacheSet ? "SUCCESS" : "FAILED");
 
       return result;
     } catch (error) {
@@ -408,6 +411,7 @@ class CarsService {
               "payment_date",
               "payment_type",
               "notes",
+              "createdAt",
             ],
             order: [["payment_date", "DESC"]],
           },
@@ -447,7 +451,7 @@ class CarsService {
 
       // Transform car data
       const carData = car.get({ plain: true });
-      console.log(carData);
+      // console.log(carData);
       return {
         ...carData,
         totalPayments: parseFloat(carData.totalPayments || 0),
@@ -548,7 +552,7 @@ class CarsService {
         }
       }
 
-      console.log("Caches invalidated successfully");
+      // console.log("Caches invalidated successfully");
     } catch (error) {
       console.error("Error invalidating caches:", error);
     }
@@ -832,7 +836,7 @@ class CarsService {
       const existingPayment = await CarPayments.findByPk(id, {
         transaction,
       });
-      console.log("Existing payment:", existingPayment);
+      // console.log("Existing payment:", existingPayment);
       if (!existingPayment) {
         throw new Error("Payment not found");
       }
@@ -872,6 +876,8 @@ class CarsService {
   }
 
   static async updateCarPayment(paymentId, updateData) {
+    console.log("Payment ID:", paymentId);
+    console.log("Update Data:", updateData);
     const transaction = await sequelize.transaction();
     try {
       // Find the existing payment with associated data
@@ -971,7 +977,7 @@ class CarsService {
         transaction,
       });
 
-      console.log("Monthly Expenses:", monthlyExpenses);
+      // console.log("Monthly Expenses:", monthlyExpenses);
 
       // Calculate cumulative expenses up to the current month
       const previousMonthExpenses = await CarExpenseStats.findAll({

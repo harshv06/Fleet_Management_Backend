@@ -38,6 +38,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
       },
+      permissions: {
+        type: DataTypes.TEXT,
+        get() {
+          const rawValue = this.getDataValue("permissions");
+          return rawValue ? JSON.parse(rawValue) : [];
+        },
+        set(value) {
+          this.setDataValue("permissions", JSON.stringify(value));
+        },
+      },
     },
     {
       timestamps: true,
@@ -47,7 +57,6 @@ module.exports = (sequelize, DataTypes) => {
 
   User.initialize = async function () {
     try {
-      console.log("SUPER_ADMIN user created successfully");
       const existingUser = await this.findOne({
         where: {
           role: "SUPER_ADMIN",
@@ -57,12 +66,11 @@ module.exports = (sequelize, DataTypes) => {
         await this.create({
           username: "admin",
           email: "admin@gmail.com",
-          password: "123", // This will be hashed by the hook
+          password: "123456", // This will be hashed by the hook
           role: "SUPER_ADMIN",
           is_active: true,
+          permissions: ROLE_PERMISSIONS["SUPER_ADMIN"] || [],
         });
-
-        console.log("SUPER_ADMIN user created successfully");
       }
     } catch (e) {
       console.log("Error creating SUPER_ADMIN user:", e.message);

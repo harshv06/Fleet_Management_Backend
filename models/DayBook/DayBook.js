@@ -17,6 +17,35 @@ module.exports = (sequelize, DataTypes) => {
           key: "company_id",
         },
       },
+      car_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        references: {
+          model: "cars",
+          key: "car_id",
+        },
+      },
+
+      bank_account_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: "bank_accounts", // Assuming you have a BankAccount model
+          key: "account_id",
+        },
+      },
+      bank_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      bank_account_number: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      bank_ifsc_code: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       transaction_date: {
         type: DataTypes.DATE,
         allowNull: false,
@@ -40,7 +69,15 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
       },
       payment_method: {
-        type: DataTypes.STRING,
+        type: DataTypes.ENUM(
+          "cash",
+          "bank_transfer",
+          "cheque",
+          "upi",
+          "card",
+          "other"
+        ),
+        allowNull: true,
       },
       notes: {
         type: DataTypes.TEXT,
@@ -53,7 +90,7 @@ module.exports = (sequelize, DataTypes) => {
       account_head: {
         type: DataTypes.STRING,
       },
-      sub_account: {
+      sub_group: {
         type: DataTypes.STRING,
       },
       voucher_type: {

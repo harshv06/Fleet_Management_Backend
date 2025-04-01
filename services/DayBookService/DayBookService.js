@@ -7,6 +7,7 @@ const {
 } = require("../../models/index");
 const { Op } = require("sequelize");
 const XLSX = require("xlsx");
+const moment = require('moment');
 
 class DayBookService {
   static async addTransaction(transactionData) {
@@ -14,6 +15,10 @@ class DayBookService {
     try {
       console.log("Incoming transaction data:", transactionData);
 
+      const { transaction_date } = transactionData;
+      console.log("Incoming transaction data:", transactionData);
+      const processedDate = moment.utc(transactionData.transaction_date).toDate();
+      console.log("Processed date:", processedDate);
       // Validate required fields
       if (
         !transactionData.transaction_date ||
@@ -78,16 +83,30 @@ class DayBookService {
       const formattedData = {
         ...transactionData,
         amount: amount,
-        transaction_date: new Date(transactionData.transaction_date),
+        transaction_date: processedDate,
         balance: newBalance,
         gst_amount: gstAmount,
         gst_applicable: Boolean(transactionData.gst_applicable),
         gst_rate: transactionData.gst_rate
           ? parseFloat(transactionData.gst_rate)
           : null,
+        company_id:
+          transactionData.party_type === "Employee"
+            ? null
+            : transactionData.company_id,
+        car_id:
+          transactionData.party_type === "Employee"
+            ? transactionData.car_id
+            : null,
       };
 
-      console.log("Formatted data before creation:", formattedData);
+      Object.keys(formattedData).forEach((key) => {
+        if (formattedData[key] === undefined || formattedData[key] === "") {
+          delete formattedData[key];
+        }
+      });
+
+      // console.log("Formatted data before creation:", formattedData);
 
       // Create the transaction
       const newTransaction = await DayBook.create(formattedData, {
@@ -120,28 +139,50 @@ class DayBookService {
         type,
         category,
         account_head,
+        bank_account_id,
         voucher_type,
         party_type,
+        page = 1,
+        limit = 20, // Default page size
       } = filters;
-      const where = {};
 
+      const whereConditions = {};
+      const orderConditions = [];
+
+      // Date filtering
       if (startDate && endDate) {
-        where.transaction_date = {
+        whereConditions.transaction_date = {
           [Op.between]: [new Date(startDate), new Date(endDate)],
         };
       }
 
-      if (type && type !== "all") where.transaction_type = type;
-      if (category && category !== "all") where.category = category;
-      if (account_head && account_head !== "all")
-        where.account_head = account_head;
-      if (voucher_type && voucher_type !== "all")
-        where.voucher_type = voucher_type;
-      if (party_type && party_type !== "all") where.party_type = party_type;
+      if (bank_account_id) {
+        whereConditions.bank_account_id = bank_account_id;
+      }
 
-      return await DayBook.findAll({
-        where,
-        order: [["transaction_date", "DESC"]],
+      // Additional filter conditions
+      if (type && type !== "all") whereConditions.transaction_type = type;
+      if (category && category !== "all") whereConditions.category = category;
+      if (account_head && account_head !== "all")
+        whereConditions.account_head = account_head;
+      if (voucher_type && voucher_type !== "all")
+        whereConditions.voucher_type = voucher_type;
+      if (party_type && party_type !== "all")
+        whereConditions.party_type = party_type;
+
+      // Sorting logic
+      orderConditions.push(["transaction_date", "DESC"]);
+      orderConditions.push(["created_at", "DESC"]);
+
+      // Pagination
+      const offset = (page - 1) * limit;
+
+      // Find and count transactions
+      const { count, rows: transactions } = await DayBook.findAndCountAll({
+        where: whereConditions,
+        order: orderConditions,
+        limit: limit,
+        offset: offset,
         attributes: [
           "transaction_id",
           "transaction_date",
@@ -154,7 +195,7 @@ class DayBookService {
           "balance",
           "notes",
           "account_head",
-          "sub_account",
+          "sub_group",
           "voucher_type",
           "voucher_number",
           "gst_applicable",
@@ -165,7 +206,37 @@ class DayBookService {
           "party_type",
           "created_at",
           "updated_at",
+          "company_id",
+          "car_id",
+          "bank_account_id",
         ],
+      });
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(count / limit);
+
+      return {
+        transactions,
+        pagination: {
+          total: count,
+          page: page,
+          pageSize: limit,
+          totalPages: totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getTransaction(identifier) {
+    try {
+      return await DayBook.findOne({
+        where: {
+          transaction_id: identifier,
+        },
       });
     } catch (error) {
       throw error;
@@ -209,14 +280,32 @@ class DayBookService {
     }
   }
 
-  static async updateTransaction(transactionId, updateData) {
-    console.log(transactionId);
+  static async updateTransaction(identifier, updateData) {
+    console.log(identifier);
     const transaction = await sequelize.transaction();
     try {
-      // Find existing transaction
-      const existingTransaction = await DayBook.findByPk(transactionId, {
-        transaction,
-      });
+      // Find existing transaction using either transaction_id or reference_number
+      let existingTransaction;
+
+      // First, try to find by transaction_id
+      if (identifier.includes("-")) {
+        // Assuming UUID format
+        existingTransaction = await DayBook.findByPk(identifier, {
+          transaction,
+        });
+      }
+
+      // If not found, try to find by reference_number
+      if (!existingTransaction) {
+        existingTransaction = await DayBook.findOne({
+          where: {
+            [Op.or]: [{ reference_number: identifier }],
+          },
+          transaction,
+        });
+      }
+
+      // Throw error if transaction not found
       if (!existingTransaction) {
         throw new Error("Transaction not found");
       }
@@ -308,29 +397,32 @@ class DayBookService {
 
   static async deleteTransaction(transactionId) {
     const transaction = await sequelize.transaction();
+    console.log("Deleting transaction:", transactionId);
+
     try {
-      // Find existing transaction
-      const existingTransaction = await DayBook.findByPk(transactionId, {
-        transaction,
-      });
+      // Transaction identification logic (same as before)
+      let existingTransaction;
+      if (transactionId.includes("-")) {
+        existingTransaction = await DayBook.findOne({
+          where: { transaction_id: transactionId },
+          transaction,
+        });
+      } else {
+        existingTransaction = await DayBook.findOne({
+          where: { reference_number: transactionId },
+          transaction,
+        });
+      }
+
       if (!existingTransaction) {
         throw new Error("Transaction not found");
       }
 
-      // Store the date before deleting
       const affectedDate = new Date(existingTransaction.transaction_date);
 
-      // Get all transactions from the affected date onwards
-      const allTransactions = await DayBook.findAll({
-        where: {
-          transaction_date: {
-            [Op.gte]: affectedDate,
-          },
-        },
-        order: [
-          ["transaction_date", "ASC"],
-          ["created_at", "ASC"],
-        ],
+      // Get the opening balance record
+      const openingBalanceRecord = await OpeningBalance.findOne({
+        order: [["set_date", "ASC"]],
         transaction,
       });
 
@@ -348,40 +440,51 @@ class DayBookService {
         transaction,
       });
 
+      // Determine initial balance
+      let initialBalance = openingBalanceRecord
+        ? parseFloat(openingBalanceRecord.amount)
+        : 0;
+
+      if (previousTransaction) {
+        initialBalance = parseFloat(previousTransaction.balance);
+      }
+
       // Delete the transaction
       await existingTransaction.destroy({ transaction });
 
-      // Recalculate balances for all remaining transactions
-      let runningBalance = previousTransaction
-        ? parseFloat(previousTransaction.balance)
-        : 0;
-
-      for (const trans of allTransactions) {
-        // Skip the deleted transaction
-        if (trans.transaction_id === transactionId) continue;
-
-        // Update running balance
-        if (trans.transaction_type === "CREDIT") {
-          runningBalance += parseFloat(trans.amount);
-        } else {
-          runningBalance -= parseFloat(trans.amount);
-        }
-
-        // Update transaction balance
-        await trans.update(
-          {
-            balance: runningBalance,
+      // Get all transactions from the affected date onwards
+      const remainingTransactions = await DayBook.findAll({
+        where: {
+          transaction_date: {
+            [Op.gte]: affectedDate,
           },
-          { transaction }
-        );
+        },
+        order: [
+          ["transaction_date", "ASC"],
+          ["created_at", "ASC"],
+        ],
+        transaction,
+      });
+
+      // Recalculate balances
+      let runningBalance = initialBalance;
+      for (const trans of remainingTransactions) {
+        runningBalance =
+          trans.transaction_type === "CREDIT"
+            ? runningBalance + parseFloat(trans.amount)
+            : runningBalance - parseFloat(trans.amount);
+
+        await trans.update({ balance: runningBalance }, { transaction });
       }
 
-      // Update monthly balances for all affected months
+      // Comprehensive Monthly Balance Update
       const startOfMonth = new Date(
         affectedDate.getFullYear(),
         affectedDate.getMonth(),
         1
       );
+
+      // Find all affected months
       const affectedMonths = await DayBook.findAll({
         attributes: [
           [
@@ -415,6 +518,7 @@ class DayBookService {
         transaction,
       });
 
+      // Process each affected month
       for (const { month } of affectedMonths) {
         const monthDate = new Date(month);
         const monthStart = new Date(
@@ -443,7 +547,7 @@ class DayBookService {
           transaction,
         });
 
-        // Calculate monthly totals
+        // Get transactions for the month
         const monthTransactions = await DayBook.findAll({
           where: {
             transaction_date: {
@@ -454,6 +558,7 @@ class DayBookService {
           transaction,
         });
 
+        // Calculate monthly totals
         const monthlyTotals = monthTransactions.reduce(
           (acc, trans) => {
             const amount = parseFloat(trans.amount);
@@ -467,7 +572,14 @@ class DayBookService {
           { credits: 0, debits: 0 }
         );
 
-        // Get or create monthly balance
+        // Determine opening and closing balances
+        const openingBalance = prevMonthBalance
+          ? prevMonthBalance.closing_balance
+          : 0;
+        const closingBalance =
+          openingBalance + monthlyTotals.credits - monthlyTotals.debits;
+
+        // Update or create monthly balance
         let monthlyBalance = await MonthlyBalance.findOne({
           where: {
             year: monthStart.getFullYear(),
@@ -475,12 +587,6 @@ class DayBookService {
           },
           transaction,
         });
-
-        const openingBalance = prevMonthBalance
-          ? prevMonthBalance.closing_balance
-          : 0;
-        const closingBalance =
-          openingBalance + monthlyTotals.credits - monthlyTotals.debits;
 
         if (monthlyBalance) {
           await monthlyBalance.update(
@@ -492,7 +598,7 @@ class DayBookService {
             },
             { transaction }
           );
-        } else {
+        } else if (monthTransactions.length > 0) {
           await MonthlyBalance.create(
             {
               year: monthStart.getFullYear(),
@@ -508,7 +614,7 @@ class DayBookService {
       }
 
       await transaction.commit();
-      return true;
+      return existingTransaction;
     } catch (error) {
       console.error("Error in deleteTransaction:", error);
       await transaction.rollback();
@@ -635,21 +741,7 @@ class DayBookService {
 
   static async recalculateBalances(startDate, transaction) {
     try {
-      // Get all transactions from the start date
-      const transactions = await DayBook.findAll({
-        where: {
-          transaction_date: {
-            [Op.gte]: startDate,
-          },
-        },
-        order: [
-          ["transaction_date", "ASC"],
-          ["created_at", "ASC"],
-        ],
-        transaction,
-      });
-
-      // Get the balance just before the start date
+      // Get the opening balance or the balance of the last transaction before the start date
       const previousTransaction = await DayBook.findOne({
         where: {
           transaction_date: {
@@ -663,17 +755,46 @@ class DayBookService {
         transaction,
       });
 
-      let runningBalance = previousTransaction
-        ? parseFloat(previousTransaction.balance)
-        : 0;
+      // Get the opening balance record
+      const openingBalanceRecord = await OpeningBalance.findOne({
+        order: [["set_date", "ASC"]],
+        transaction,
+      });
+
+      // Determine the starting balance
+      let runningBalance = 0;
+      if (openingBalanceRecord) {
+        runningBalance = parseFloat(openingBalanceRecord.amount);
+      }
+
+      // If there's a previous transaction after the opening balance, use its balance
+      if (previousTransaction) {
+        runningBalance = parseFloat(previousTransaction.balance);
+      }
+
+      // Get all transactions from the start date onwards
+      const transactions = await DayBook.findAll({
+        where: {
+          transaction_date: {
+            [Op.gte]: startDate,
+          },
+        },
+        order: [
+          ["transaction_date", "ASC"],
+          ["created_at", "ASC"],
+        ],
+        transaction,
+      });
 
       // Recalculate all balances
       for (const trans of transactions) {
+        // Calculate new balance based on transaction type
         runningBalance =
           trans.transaction_type === "CREDIT"
             ? runningBalance + parseFloat(trans.amount)
             : runningBalance - parseFloat(trans.amount);
 
+        // Update the transaction with the new balance
         await trans.update(
           {
             balance: runningBalance,
@@ -684,11 +805,13 @@ class DayBookService {
 
       return runningBalance;
     } catch (error) {
+      console.error("Error in recalculateBalances:", error);
       throw error;
     }
   }
 
   static async updateMonthlyBalances(startDate, transaction) {
+    console.log("Starting Date:",startDate)
     try {
       // Get all affected months
       const months = await DayBook.findAll({
@@ -723,9 +846,17 @@ class DayBookService {
         raw: true,
         transaction,
       });
-
-      let previousMonthClosingBalance = 0;
-
+  
+      // Get the opening balance record
+      const openingBalanceRecord = await OpeningBalance.findOne({
+        order: [["set_date", "ASC"]],
+        transaction,
+      });
+  
+      let previousMonthClosingBalance = openingBalanceRecord
+        ? parseFloat(openingBalanceRecord.amount)
+        : 0;
+  
       for (const { month } of months) {
         const monthStart = new Date(month);
         const monthEnd = new Date(
@@ -736,24 +867,27 @@ class DayBookService {
           59,
           59
         );
-
-        // Get previous month's balance first
+  
+        // Dynamically calculate previous month
+        const prevMonth = monthStart.getMonth() === 0 ? 11 : monthStart.getMonth() - 1;
+        const prevYear = monthStart.getMonth() === 0 
+          ? monthStart.getFullYear() - 1 
+          : monthStart.getFullYear();
+  
+        // Get previous month's balance
         const prevMonthBalance = await MonthlyBalance.findOne({
           where: {
-            year:
-              monthStart.getMonth() === 0
-                ? monthStart.getFullYear() - 1
-                : monthStart.getFullYear(),
-            month: monthStart.getMonth() === 0 ? 12 : monthStart.getMonth(),
+            year: prevYear,
+            month: prevMonth + 1, // Adding 1 because month is 1-indexed in DB
           },
           transaction,
         });
-
-        // Set opening balance from previous month's closing balance
+  
+        // Determine opening balance
         const openingBalance = prevMonthBalance
           ? prevMonthBalance.closing_balance
           : previousMonthClosingBalance;
-
+  
         // Calculate monthly totals
         const monthlyTransactions = await DayBook.findAll({
           where: {
@@ -767,65 +901,61 @@ class DayBookService {
           ],
           transaction,
         });
-
-        let runningBalance = openingBalance;
-        let totalCredits = 0;
-        let totalDebits = 0;
-
-        // Calculate running balance and totals
-        for (const trans of monthlyTransactions) {
-          const amount = parseFloat(trans.amount);
-          if (trans.transaction_type === "CREDIT") {
-            runningBalance += amount;
-            totalCredits += amount;
-          } else {
-            runningBalance -= amount;
-            totalDebits += amount;
+  
+        // Calculate totals and closing balance
+        const monthlyTotals = monthlyTransactions.reduce(
+          (acc, trans) => {
+            const amount = parseFloat(trans.amount);
+            if (trans.transaction_type === "CREDIT") {
+              acc.credits += amount;
+              acc.closingBalance += amount;
+            } else {
+              acc.debits += amount;
+              acc.closingBalance -= amount;
+            }
+            return acc;
+          },
+          {
+            credits: 0,
+            debits: 0,
+            closingBalance: openingBalance,
           }
-        }
-
+        );
+  
         // Get or create monthly balance
         let monthlyBalance = await MonthlyBalance.findOne({
           where: {
             year: monthStart.getFullYear(),
-            month: monthStart.getMonth() + 1,
+            month: monthStart.getMonth() + 1, // Adding 1 because month is 1-indexed in DB
           },
           transaction,
         });
-
+  
+        // Prepare data for monthly balance
+        const monthBalanceData = {
+          year: monthStart.getFullYear(),
+          month: monthStart.getMonth() + 1, // Adding 1 because month is 1-indexed in DB
+          opening_balance: openingBalance,
+          closing_balance: monthlyTotals.closingBalance,
+          total_credits: monthlyTotals.credits,
+          total_debits: monthlyTotals.debits,
+        };
+  
+        // Create or update monthly balance
         if (!monthlyBalance) {
-          monthlyBalance = await MonthlyBalance.create(
-            {
-              year: monthStart.getFullYear(),
-              month: monthStart.getMonth() + 1,
-              opening_balance: openingBalance,
-              closing_balance: runningBalance,
-              total_credits: totalCredits,
-              total_debits: totalDebits,
-            },
-            { transaction }
-          );
+          await MonthlyBalance.create(monthBalanceData, { transaction });
         } else {
-          await monthlyBalance.update(
-            {
-              opening_balance: openingBalance,
-              closing_balance: runningBalance,
-              total_credits: totalCredits,
-              total_debits: totalDebits,
-            },
-            { transaction }
-          );
+          await monthlyBalance.update(monthBalanceData, { transaction });
         }
-
-        // Store this month's closing balance for next iteration
-        previousMonthClosingBalance = runningBalance;
+  
+        // Update previous month's closing balance for next iteration
+        previousMonthClosingBalance = monthlyTotals.closingBalance;
       }
     } catch (error) {
       console.error("Error in updateMonthlyBalances:", error);
       throw error;
     }
   }
-
   static async exportToExcel(filters) {
     try {
       const transactions = await this.getTransactions(filters);

@@ -91,26 +91,26 @@ class CacheService {
 
   async get(key) {
     const value = this.cache.get(key);
-    console.log(`Cache get for key ${key}:`, value ? "HIT" : "MISS");
+    // console.log(`Cache get for key ${key}:`, value ? "HIT" : "MISS");
     return value;
   }
 
   async set(key, value, ttl = 300) {
-    console.log(`Cache set for key ${key}`);
+    // console.log(`Cache set for key ${key}`);
     const result = this.cache.set(key, value, ttl);
-    console.log(`Cache keys after set:`, this.cache.keys());
+    // console.log(`Cache keys after set:`, this.cache.keys());
     return result;
   }
 
   async del(key) {
-    console.log(`Cache deleted for key ${key}`);
+    // console.log(`Cache deleted for key ${key}`);
     const result = this.cache.del(key);
-    console.log(`Cache keys after delete:`, this.cache.keys());
+    // console.log(`Cache keys after delete:`, this.cache.keys());
     return result;
   }
 
   async flush() {
-    console.log("Cache flushed");
+    // console.log("Cache flushed");
     return this.cache.flushAll();
   }
 
@@ -124,12 +124,12 @@ class CacheService {
     try {
       const allPromises = patterns.map(async (pattern) => {
         const keys = await this.keys(pattern);
-        console.log(`Clearing cache keys for pattern ${pattern}:`, keys);
+        // console.log(`Clearing cache keys for pattern ${pattern}:`, keys);
         return Promise.all(keys.map((key) => this.del(key)));
       });
 
       await Promise.all(allPromises);
-      console.log("Cleared caches for patterns:", patterns);
+      // console.log("Cleared caches for patterns:", patterns);
     } catch (error) {
       console.error("Error clearing multiple cache patterns:", error);
       throw error;
@@ -137,22 +137,19 @@ class CacheService {
   }
   async clearPaymentHistoryCache(companyId) {
     const keys = await this.keys(`payment_history_${companyId}`);
-    console.log(
-      `Clearing payment history cache keys for company ${companyId}:`,
-      keys
-    );
+    // console.log(`Clearing payment history cache keys for company ${companyId}:`,keys);
     const results = await Promise.all(keys.map((key) => this.del(key)));
-    console.log("Cache clear results:", results);
-    console.log("Remaining cache keys:", this.cache.keys());
+    // console.log("Cache clear results:", results);
+    // console.log("Remaining cache keys:", this.cache.keys());
     return results;
   }
 
   async clearCompanyListCache() {
     const keys = await this.keys("companies_list_");
-    console.log("Clearing company list cache keys:", keys);
+    // console.log("Clearing company list cache keys:", keys);
     const results = await Promise.all(keys.map((key) => this.del(key)));
-    console.log("Cache clear results:", results);
-    console.log("Remaining cache keys:", this.cache.keys());
+    // console.log("Cache clear results:", results);
+    // console.log("Remaining cache keys:", this.cache.keys());
     return results;
   }
 

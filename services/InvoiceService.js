@@ -8,6 +8,7 @@ const {
 } = require("../models/index");
 const { Op } = require("sequelize");
 const TransactionService = require("./TransactionService");
+const TransactionTrackingService = require("./TransactionService");
 
 class InvoiceService {
   static async createInvoice(invoiceData) {
@@ -61,6 +62,7 @@ class InvoiceService {
           invoice_date: new Date(),
           due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
           customer_name: data.name,
+          remaining_amount: grand_total,
         },
         { transaction }
       );
@@ -81,7 +83,7 @@ class InvoiceService {
       // await CompanyStats.updateInvoiceStats(invoice);
       await PaymentHistory.create(
         {
-          transaction_type: "EXPENSE_CAR_ADVANCE",
+          transaction_type: "INVOICE_REVENUE",
           amount: invoice.grand_total,
           reference_id: invoice.invoice_id,
           transaction_date: invoice.invoice_date,
@@ -111,103 +113,98 @@ class InvoiceService {
     }
   }
 
-  static async recordPayment(invoiceId, paymentAmount, paymentMethod = 'cash') {
+  static async recordPayment(invoiceId, paymentAmount, paymentMethod = "cash") {
     const transaction = await sequelize.transaction();
-  
+
     try {
-      const invoice = await Invoice.findByPk(invoiceId, {
+      // Find invoice using either invoice_id or invoice_number
+      const invoice = await Invoice.findOne({
+        where: {
+          [Op.or]: [{ invoice_id: invoiceId }, { invoice_number: invoiceId }],
+        },
         include: [
           {
             model: Company,
-            as: 'invoiceCompany',
-          }
+            as: "invoiceCompany",
+          },
         ],
         transaction,
       });
-  
+
       if (!invoice) {
-        throw new Error('Invoice not found');
+        throw new Error("Invoice not found");
       }
-  
+
       const currentAmountPaid = parseFloat(invoice.amount_paid) || 0;
       const newAmountPaid = currentAmountPaid + parseFloat(paymentAmount);
       const grandTotal = parseFloat(invoice.grand_total);
-  
+
       // Validate payment amount
       if (newAmountPaid > grandTotal) {
-        throw new Error('Payment amount exceeds invoice total');
+        throw new Error("Payment amount exceeds invoice total");
       }
-  
+
       // Calculate remaining amount
       const remainingAmount = grandTotal - newAmountPaid;
-  
+
       // Determine payment status
       let paymentStatus;
       if (newAmountPaid >= grandTotal) {
-        paymentStatus = 'fully_paid';
+        paymentStatus = "fully_paid";
       } else if (newAmountPaid > 0) {
-        paymentStatus = 'partially_paid';
+        paymentStatus = "partially_paid";
       } else {
-        paymentStatus = 'unpaid';
+        paymentStatus = "unpaid";
       }
-  
+
       // Update invoice
-      await invoice.update({
-        amount_paid: newAmountPaid,
-        remaining_amount: remainingAmount,
-        payment_status: paymentStatus,
-        status: paymentStatus === 'fully_paid' ? 'paid' : 'pending',
-        updated_at: new Date(),
-      }, { transaction });
-  
-      // Record payment transaction
-      await PaymentHistory.create({
-        transaction_type: 'INCOME_COMPANY_PAYMENT',
-        amount: paymentAmount,
-        reference_id: invoice.invoice_id,
-        transaction_date: new Date(),
-        description: `Payment received for invoice ${invoice.invoice_number}`,
-        transaction_source: 'COMPANY',
-        reference_source_id: invoice.company_id,
-        payment_method: paymentMethod,
-        metadata: {
-          invoice_number: invoice.invoice_number,
-          payment_status: paymentStatus,
-          amount_paid: paymentAmount,
+      await invoice.update(
+        {
+          amount_paid: newAmountPaid,
           remaining_amount: remainingAmount,
-        }
-      }, { transaction });
-  
-      // Record transaction
-      // await TransactionService.recordTransaction({
-      //   transaction_type: TransactionService.TRANSACTION_TYPES.INCOME.COMPANY_PAYMENT,
-      //   amount: paymentAmount,
-      //   source: 'COMPANY',
-      //   sourceId: invoice.company_id,
-      //   description: `Partial payment received for invoice ${invoice.invoice_number}`,
-      //   metadata: {
-      //     invoice_number: invoice.invoice_number,
-      //     payment_status: paymentStatus,
-      //     amount_paid: paymentAmount,
-      //     remaining_amount: remainingAmount,
-      //   }
-      // }, { transaction });
-  
+          payment_status: paymentStatus,
+          status: paymentStatus === "fully_paid" ? "paid" : "pending",
+          updated_at: new Date(),
+        },
+        { transaction }
+      );
+
+      // Record payment transaction
+      await PaymentHistory.create(
+        {
+          transaction_type: "INCOME_COMPANY_PAYMENT",
+          amount: paymentAmount,
+          reference_id: invoice.invoice_id,
+          transaction_date: new Date(),
+          description: `Payment received for invoice ${invoice.invoice_number}`,
+          transaction_source: "COMPANY",
+          reference_source_id: invoice.company_id,
+          payment_method: paymentMethod,
+          metadata: {
+            invoice_number: invoice.invoice_number,
+            payment_status: paymentStatus,
+            amount_paid: paymentAmount,
+            remaining_amount: remainingAmount,
+          },
+        },
+        { transaction }
+      );
+
       await transaction.commit();
-  
+
       return {
-        status: 'success',
-        message: 'Payment recorded successfully',
+        status: "success",
+        message: "Payment recorded successfully",
         data: {
           invoice_number: invoice.invoice_number,
           amount_paid: newAmountPaid,
           remaining_amount: remainingAmount,
           payment_status: paymentStatus,
-        }
+        },
       };
-  
     } catch (error) {
       await transaction.rollback();
+      console.error("Payment recording error:", error);
       throw new Error(`Failed to record payment: ${error.message}`);
     }
   }
@@ -246,7 +243,6 @@ class InvoiceService {
         offset: (page - 1) * limit,
       });
 
-      
       return {
         invoices,
         pagination: {
@@ -332,7 +328,7 @@ class InvoiceService {
           //     status: invoice.status,
           //   },
           // });
-    
+
           // Record income transaction
           await TransactionService.recordTransaction({
             transaction_type: transactionType,
@@ -429,7 +425,7 @@ class InvoiceService {
           {
             model: Company,
             as: "invoiceCompany",
-            attributes: ["company_name", "address", "gst_number"],
+            attributes: ["company_name", "address", "gst_number", "pan_number"],
           },
         ],
       });
@@ -437,7 +433,7 @@ class InvoiceService {
       if (!invoice) {
         throw new Error("Invoice not found");
       }
-
+      console.log(invoice);
       return invoice;
     } catch (error) {
       throw error;
@@ -513,7 +509,7 @@ class InvoiceService {
   // Delete Invoice
   static async deleteInvoice(invoiceId) {
     const transaction = await sequelize.transaction();
-
+    console.log("deleteInvoice:", invoiceId);
     try {
       // Find invoice with all related data
       const invoice = await Invoice.findByPk(invoiceId, {
@@ -547,7 +543,7 @@ class InvoiceService {
 
       // Record deletion transaction
       await TransactionTrackingService.recordTransaction({
-        type: "INVOICE_DELETED",
+        type: "INVOICE_DELETE",
         amount: 0,
         source: "COMPANY",
         sourceId: invoice.company_id,

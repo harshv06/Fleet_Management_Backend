@@ -135,6 +135,7 @@ exports.getAllCompanies = async ({
         "phone",
         "total_revenue",
         "created_at",
+        "status",
       ],
       // Add any necessary includes
       include: [
@@ -163,6 +164,30 @@ exports.getAllCompanies = async ({
         to: Math.min(offset + limit, count),
       },
     };
+  } catch (error) {
+    console.error("Error retrieving companies:", error);
+    throw new Error(`Failed to retrieve companies: ${error.message}`);
+  }
+};
+
+exports.getAllCompaniesWithOutPagination = async () => {
+  try {
+    const companies = await Company.findAll({
+      attributes: [
+        "company_id",
+        "company_name",
+        "gst_number",
+        "pan_number",
+        "address",
+        "client_type",
+        "email",
+        "phone",
+        "total_revenue",
+        "created_at",
+      ],
+    });
+    console.log(companies)
+    return companies;
   } catch (error) {
     console.error("Error retrieving companies:", error);
     throw new Error(`Failed to retrieve companies: ${error.message}`);
@@ -272,7 +297,7 @@ exports.getCompanyById = async (id) => {
 
 exports.addCompany = async (companyData) => {
   const transaction = await sequelize.transaction();
-
+  console.log("Company data:", companyData);
   try {
     // Add timestamps
     companyData.created_at = new Date();
@@ -290,6 +315,8 @@ exports.addCompany = async (companyData) => {
         "created_at",
         "updated_at",
         "client_type",
+        companyData.gst_number?"gst_number":null,
+        companyData.pan_number?"pan_number":null,
       ],
     });
 

@@ -22,9 +22,12 @@ const DayBookModel = require("./DayBook/DayBook");
 const MonthlyBalanceModel = require("./DayBook/MonthlyBalance");
 const OpeningBalanceModel = require("./DayBook/OpeningBalance");
 const CategoryModel = require("./DayBook/Categories");
+const SubGroupsModel=require("./DayBook/SubGroups")
 const SalaryCalculationsModel = require("./SalaryCalculations/SalaryCalculations");
 const SalaryCalculationsHistoryModel = require("./SalaryCalculations/SalaryCalculationsHistory");
 const CarSalaryRecordModel = require("./SalaryCalculations/CarSalaryRecord");
+const BankAccount = require("./BankAccount/BankAccount");
+const BankTransaction = require("./BankAccount/BankTransaction");
 
 // Initialize models
 const Company = CompanyModel(sequelize, DataTypes);
@@ -46,12 +49,15 @@ const DayBook = DayBookModel(sequelize, DataTypes);
 const MonthlyBalance = MonthlyBalanceModel(sequelize, DataTypes);
 const OpeningBalance = OpeningBalanceModel(sequelize, DataTypes);
 const Category = CategoryModel(sequelize, DataTypes);
+const SubGroups=SubGroupsModel(sequelize,DataTypes)
 const SalaryCalculations = SalaryCalculationsModel(sequelize, DataTypes);
 const SalaryCalculationsHistory = SalaryCalculationsHistoryModel(
   sequelize,
   DataTypes
 );
 const CarSalaryRecord = CarSalaryRecordModel(sequelize, DataTypes);
+const BankAccountModel = BankAccount(sequelize, DataTypes);
+const BankTransactionModel = BankTransaction(sequelize, DataTypes);
 
 // Comprehensive Associations
 
@@ -310,6 +316,25 @@ Company.hasMany(DayBook, {
   as: "transactions",
 });
 
+DayBook.belongsTo(Cars, {
+  foreignKey: "car_id",
+  as: "cars",
+});
+
+Cars.hasMany(DayBook, {
+  foreignKey: "car_id",
+  as: "DayBookCarTransactions",
+});
+
+DayBook.associate = (models) => {
+  // Bank Account Association
+  DayBook.belongsTo(models.BankAccountModel, {
+    foreignKey: 'account_id',
+    as: 'bankAccount',
+    onDelete: 'SET NULL'
+  });
+};
+
 // PaymentHistory.belongsTo
 // Optional: Add Scopes or Additional Configuration
 Company.addScope("withInvoices", {
@@ -329,6 +354,61 @@ Invoice.addScope("withItems", {
     },
   ],
 });
+
+
+SubGroups.belongsTo(Category, {
+  foreignKey: 'category_id',
+  as: 'category'
+});
+
+Category.hasMany(SubGroups, {
+  foreignKey: 'category_id',
+  as: 'subGroups'
+});
+
+PaymentHistory.belongsTo(Company, {
+  foreignKey: 'company_id',
+  as: 'company'
+});
+
+PaymentHistory.belongsTo(Invoice, {
+  foreignKey: 'reference_id',
+  targetKey: 'invoice_id',
+  as: 'invoice',
+  constraints: false
+});
+
+PaymentHistory.belongsTo(Cars, {
+  foreignKey: 'reference_source_id',
+  as: 'carPaymentHistory',
+  constraints: false,
+  scope: {
+    transaction_source: 'CAR'
+  }
+});
+
+// Invoice Associations (additional to existing ones)
+Invoice.hasMany(PaymentHistory, {
+  foreignKey: 'reference_id',
+  sourceKey: 'invoice_id',
+  as: 'transactionHistories',
+  constraints: false,
+  scope: {
+    transaction_type: ['INCOME_INVOICE', 'INVOICE_REVENUE', 'INVOICE_STATUS_CHANGE']
+  }
+});
+
+// Payments Association
+Invoice.hasMany(Payment, {
+  foreignKey: 'invoice_id',
+  as: 'payments'
+});
+
+Payment.belongsTo(Invoice, {
+  foreignKey: 'invoice_id',
+  as: 'invoice'
+});
+
 
 // Export models with associations
 module.exports = {
@@ -357,4 +437,7 @@ module.exports = {
   SalaryCalculations,
   SalaryCalculationsHistory,
   CarSalaryRecord,
+  BankAccountModel,
+  BankTransactionModel,
+  SubGroups
 };

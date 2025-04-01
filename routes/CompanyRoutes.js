@@ -40,6 +40,12 @@ CompanyRouter.get(
 );
 
 CompanyRouter.get(
+  "/getAllCompaniesWithoutPagination",
+  // cacheMiddleware(CACHE_DURATIONS.SHORT),
+  CompanyController.getAllCompaniesWithOutPagination
+);
+
+CompanyRouter.get(
   "/getCompanyById/:companyId",
   cacheMiddleware(CACHE_DURATIONS.SHORT),
   CompanyController.getCompanyById
@@ -48,44 +54,48 @@ CompanyRouter.get(
 // Write operations with cache clearing
 CompanyRouter.post(
   "/recordPayments",
-  clearCacheMiddleware(["payment_history_", "monthly_sum_","dashboard_data_"]),
+  clearCacheMiddleware(["payment_history_", "monthly_sum_", "dashboard_data_"]),
   CompanyController.recordPayments
 );
 
 CompanyRouter.post(
   "/addCompany",
   apiLimiter,
-  clearCacheMiddleware(["companies_list_","dashboard_data_"]),
+  clearCacheMiddleware(["companies_list_", "dashboard_data_"]),
   CompanyController.addCompany
 );
 
 CompanyRouter.put(
   "/updateCompany/:companyId",
   apiLimiter,
-  clearCacheMiddleware(["companies_list_", "company_","dashboard_data_"]),
+  clearCacheMiddleware(["companies_list_", "company_", "dashboard_data_"]),
   CompanyController.updateCompany
 );
 
 CompanyRouter.delete(
   "/deleteCompany/:companyId",
   apiLimiter,
-  clearCacheMiddleware(["companies_list_", "company_", "payment_history_","dashboard_data_"]),
+  clearCacheMiddleware([
+    "companies_list_",
+    "company_",
+    "payment_history_",
+    "dashboard_data_",
+  ]),
   CompanyController.deleteCompany
 );
 
 CompanyRouter.delete(
   "/deletePayment/:paymentId",
   apiLimiter,
-  clearCacheMiddleware(["payment_history_", "monthly_sum_","dashboard_data_"]),
+  clearCacheMiddleware(["payment_history_", "monthly_sum_", "dashboard_data_"]),
   CompanyController.deletePayment
 );
 
 CompanyRouter.put(
   "/updatePaymentDetails/:paymentId",
   apiLimiter,
-  clearCacheMiddleware(["payment_history_", "monthly_sum_","dashboard_data_"]),
+  clearCacheMiddleware(["payment_history_", "monthly_sum_", "dashboard_data_"]),
   CompanyController.updatePaymentDetails
 );
-
 
 module.exports = CompanyRouter;

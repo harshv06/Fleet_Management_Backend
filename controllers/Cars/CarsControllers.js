@@ -1,5 +1,5 @@
 // const Cars = require("../../models/Cars");
-const {Cars} =require("../../models/index")
+const { Cars, CarPayments,sequelize } = require("../../models/index");
 const CarCompanyAssignmentService = require("../../services/CarCompanyAssignmentService");
 const CarsService = require("../../services/CarsService");
 
@@ -46,6 +46,7 @@ class CarsController {
   }
 
   static async recordAdvanceCarPayment(req, res) {
+    // console.log(paymentData);
     try {
       const paymentData = req.body;
 
@@ -68,6 +69,73 @@ class CarsController {
       res.status(500).json({
         status: "error",
         message: error.message || "Internal server error",
+      });
+    }
+  }
+
+  static async createCarPaymentFromDaybook(req, res) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      const paymentData = req.body;
+
+      // Check if a payment already exists for this transaction
+      const existingPayment = await CarPayments.findOne({
+        where: {
+          transaction_id: paymentData.transaction_id,
+        },
+        transaction,
+      });
+
+      // If payment already exists, update instead of create
+      if (existingPayment) {
+        const updatedPayment = await existingPayment.update(
+          {
+            car_id: paymentData.car_id,
+            amount: parseFloat(paymentData.amount),
+            payment_type: paymentData.payment_type,
+            payment_date: paymentData.transaction_date,
+            description: paymentData.description,
+            // Add other relevant fields
+          },
+          { transaction }
+        );
+
+        
+
+        await transaction.commit();
+        return res.status(200).json({
+          status: "updated",
+          data: { payment: updatedPayment },
+        });
+      }
+
+      // Create new payment
+      const newPayment = await CarPayments.create(
+        {
+          car_id: paymentData.car_id,
+          amount: parseFloat(paymentData.amount),
+          payment_type: paymentData.payment_type,
+          payment_date: paymentData.transaction_date,
+          transaction_id: paymentData.transaction_id,
+          description: paymentData.description,
+          // Add other relevant fields
+        },
+        { transaction }
+      );
+
+      await transaction.commit();
+
+      res.status(201).json({
+        status: "created",
+        data: { payment: newPayment },
+      });
+    } catch (error) {
+      await transaction.rollback();
+      console.error("Error creating/updating car payment:", error);
+      res.status(500).json({
+        error: "Failed to process car payment",
+        details: error.message,
       });
     }
   }
@@ -104,7 +172,7 @@ class CarsController {
 
   static async addCar(req, res) {
     try {
-      console.log(req.body);
+      // console.log(req.body);
       const car = await CarsService.addCar(req.body);
       res.json(car);
     } catch (error) {
@@ -236,6 +304,7 @@ class CarsController {
   static async deleteCarPayment(req, res) {
     try {
       const { paymentId } = req.params;
+      console.log("done:",paymentId,req.params);
       await CarsService.deleteCarPayments(paymentId);
       res.json({ message: "Car payment deleted successfully" });
     } catch (error) {

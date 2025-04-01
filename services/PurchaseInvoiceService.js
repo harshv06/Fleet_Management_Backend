@@ -65,7 +65,7 @@ class PurchaseInvoiceService {
         ],
         order: [["created_at", "DESC"]],
       });
-      console.log(invoices);
+      // console.log(invoices);
       return invoices;
     } catch (error) {
       console.error("Error fetching purchase invoices:", error);
@@ -138,7 +138,7 @@ class PurchaseInvoiceService {
       if (!companyStats) {
         companyStats = await CompanyStats.create(
           {
-            company_id: invoice.vendor_id,
+            company_id: invoice.vendor_id || 1,
             total_expenses: 0,
           },
           { transaction }
@@ -158,7 +158,7 @@ class PurchaseInvoiceService {
           { transaction }
         );
 
-        console.log("Invoice amount:", invoiceAmount);
+        // console.log("Invoice amount:", invoiceAmount);
         // Record the purchase transaction
         await PurchaseTransaction.create(
           {
@@ -195,7 +195,7 @@ class PurchaseInvoiceService {
           transaction,
         });
 
-        console.log(`Deleted ${deleteResult} purchase transactions`);
+        // console.log(`Deleted ${deleteResult} purchase transactions`);
 
         if (deleteResult === 0) {
           console.warn(

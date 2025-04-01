@@ -14,8 +14,33 @@ class DayBookController {
 
   static async getTransactions(req, res) {
     try {
-      const transactions = await DayBookService.getTransactions(req.query);
-      res.json({ status: "success", data: transactions });
+      const { 
+        page = 1, 
+        limit = 20, 
+        ...otherFilters 
+      } = req.query;
+  
+      const result = await DayBookService.getTransactions({
+        page: parseInt(page),
+        limit: parseInt(limit),
+        ...otherFilters
+      });
+  
+      res.json({ 
+        status: "success", 
+        data: result.transactions,
+        pagination: result.pagination 
+      });
+    } catch (error) {
+      res.status(500).json({ status: "error", message: error.message });
+    }
+  }
+
+  static async getTransaction(req, res) {
+    try {
+      const { transactionId: id } = req.params;
+      const transaction = await DayBookService.getTransaction(id);
+      res.json({ status: "success", data: transaction });
     } catch (error) {
       res.status(500).json({ status: "error", message: error.message });
     }
@@ -56,11 +81,12 @@ class DayBookController {
   static async deleteTransaction(req, res) {
     try {
       const { transactionId: id } = req.params;
-      console.log(id);
-      await DayBookService.deleteTransaction(id);
+      // console.log("ID:",id);
+      const data=await DayBookService.deleteTransaction(id);
       res.json({
         status: "success",
         message: "Transaction deleted successfully",
+        data:data
       });
     } catch (error) {
       res.status(500).json({

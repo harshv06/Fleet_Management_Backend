@@ -8,7 +8,7 @@ class AuthController {
   static async signup(req, res) {
     try {
       const { username, email, password } = req.body;
-      console.log(username,email,password)
+      // console.log(username,email,password)
 
      
       if (!username || !email || !password) {
@@ -20,7 +20,7 @@ class AuthController {
 
       const existingUser = await User.findOne({ where: { email } });
       if (existingUser) {
-        console.log("allready exists")
+        // console.log("allready exists")
         return res.status(400).json({
           success: false,
           message: "User already exists",

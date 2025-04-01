@@ -9,7 +9,7 @@ class ReportService {
       // Get all transactions for the given category and date range
       const transactions = await DayBook.findAll({
         where: {
-          category,
+          category : category || "DIRECT",
           transaction_date: {
             [Op.between]: [startDate, endDate],
           },
@@ -26,7 +26,7 @@ class ReportService {
       console.log("Here", transactions);
       // Group transactions by company
       const companyTransactions = transactions.reduce((acc, transaction) => {
-        const companyName = transaction.company.company_name;
+        const companyName = transaction.company_name || transaction.car_id;
         if (!acc[companyName]) {
           acc[companyName] = {
             credits: 0,
