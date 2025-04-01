@@ -49,6 +49,20 @@ exports.getAllCompanies = async (req, res) => {
   }
 };
 
+exports.getAllCompaniesWithOutPagination = async (req, res) => {
+  try {
+    const companies = await CompanyService.getAllCompaniesWithOutPagination();
+    res.json({ status: "success", data: companies });
+  } catch (error) {
+    console.error("Error getting companies:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to retrieve companies",
+      error: error.message,
+    });
+  }
+};
+
 exports.recordPayments = async (req, res) => {
   try {
     const {
@@ -116,7 +130,7 @@ exports.getPaymentHistory = async (req, res) => {
     const { page, limit, startDate, endDate, status, payment_method } =
       req.query;
 
-      console.log("Company ID:", companyId);
+    // console.log("Company ID:", companyId);
     // Validate date range
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
       return res.status(400).json({
@@ -232,7 +246,7 @@ exports.updatePaymentDetails = async (req, res) => {
   // console.log(req.body);
   try {
     const { paymentId } = req.params;
-    console.log("Company ID:", paymentId);
+    // console.log("Company ID:", paymentId);
     const company = await CompanyService.updatePaymentDetails(
       paymentId,
       req.body
@@ -248,8 +262,3 @@ exports.updatePaymentDetails = async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 };
-
-
-
-
-

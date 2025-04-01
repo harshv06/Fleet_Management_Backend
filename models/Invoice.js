@@ -8,6 +8,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        field: "invoice_id",
+        get() {
+          const rawValue = this.getDataValue("invoice_id");
+          return rawValue ? rawValue.toString() : null;
+        },
+        set(value) {
+          // Ensure the value is stored as a UUID
+          this.setDataValue(
+            "invoice_id",
+            value && typeof value === "string" ? value.trim() : value
+          );
+        },
       },
       invoice_number: {
         type: DataTypes.STRING,
@@ -84,8 +96,47 @@ module.exports = (sequelize, DataTypes) => {
           fields: ["invoice_number", "company_id"],
         },
       ],
+      hooks: {
+        beforeValidate: (invoice, options) => {
+          // Ensure invoice_id is a valid UUID
+          if (invoice.invoice_id) {
+            // Convert to string and trim
+            invoice.invoice_id = invoice.invoice_id.toString().trim();
+          }
+        },
+      },
     }
   );
+
+  Invoice.findOneByIdentifier = async function (identifier, options = {}) {
+    try {
+      // Validate and clean the identifier
+      if (!identifier) {
+        throw new Error("No identifier provided");
+      }
+
+      // Prepare where conditions
+      const whereConditions = {
+        [Op.or]: [{ invoice_id: identifier }, { invoice_number: identifier }],
+      };
+
+      // Merge with any existing where conditions
+      if (options.where) {
+        options.where = {
+          ...options.where,
+          ...whereConditions,
+        };
+      } else {
+        options.where = whereConditions;
+      }
+
+      // Perform the findOne operation
+      return await this.findOne(options);
+    } catch (error) {
+      console.error("Error finding invoice:", error);
+      throw error;
+    }
+  };
 
   // Class methods for financial reporting
   Invoice.getInvoiceStatusSummary = async function (options = {}) {

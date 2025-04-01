@@ -7,6 +7,8 @@ const {
   CarPayments,
   PaymentHistory,
   CompanyStats,
+  DayBook,
+  PurchaseInvoice,
 } = require("../models/index");
 const { Op } = require("sequelize");
 
@@ -14,7 +16,7 @@ class DashboardController {
   // Remove 'static' and use class methods
 
   // In DashboardController class, add this new method
-  async getFilteredData(req, res) {
+  async getFilteredRevenueData(timeframe, year, month) {
     const MONTH_NAMES = [
       "Jan",
       "Feb",
@@ -29,204 +31,154 @@ class DashboardController {
       "Nov",
       "Dec",
     ];
-    try {
-      const { month, year, timeframe } = req.query;
-      const currentYear = parseInt(year) || new Date().getFullYear();
-      const selectedMonth = parseInt(month);
-      console.log("Selected month:", selectedMonth);
-      // Get filtered expense data
-      const expenseBreakdown = await CarPayments.findAll({
-        attributes: [
-          "payment_type",
-          [sequelize.fn("SUM", sequelize.col("amount")), "value"],
-        ],
-        where: {
-          [Op.and]: [
-            sequelize.where(
-              sequelize.fn(
-                "EXTRACT",
-                sequelize.literal("MONTH FROM payment_date")
-              ),
-              selectedMonth + 1
-            ),
-            sequelize.where(
-              sequelize.fn(
-                "EXTRACT",
-                sequelize.literal("YEAR FROM payment_date")
-              ),
-              currentYear
-            ),
-          ],
-        },
-        group: ["payment_type", "payment_date"],
-        raw: true,
-      });
-      console.log("Expense Breakdown:", expenseBreakdown);
-      // Get filtered revenue data based on timeframe
-      let revenueData;
-      switch (timeframe) {
-        case "yearly":
-          revenueData = await PaymentHistory.findAll({
-            attributes: [
-              [
-                sequelize.fn(
-                  "EXTRACT",
-                  sequelize.literal("YEAR FROM transaction_date")
-                ),
-                "year",
-              ],
-              [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
-            ],
-            where: {
-              transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
-            },
-            group: [
+
+    let revenueData;
+    switch (timeframe) {
+      case "yearly":
+        revenueData = await PaymentHistory.findAll({
+          attributes: [
+            [
               sequelize.fn(
                 "EXTRACT",
                 sequelize.literal("YEAR FROM transaction_date")
               ),
+              "year",
             ],
-            order: [
-              [
-                sequelize.fn(
-                  "EXTRACT",
-                  sequelize.literal("YEAR FROM transaction_date")
-                ),
-                "ASC",
-              ],
+            [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
+          ],
+          where: {
+            transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
+          },
+          group: [
+            sequelize.fn(
+              "EXTRACT",
+              sequelize.literal("YEAR FROM transaction_date")
+            ),
+          ],
+          order: [
+            [
+              sequelize.fn(
+                "EXTRACT",
+                sequelize.literal("YEAR FROM transaction_date")
+              ),
+              "ASC",
             ],
-            raw: true,
-          });
-          break;
+          ],
+          raw: true,
+        });
+        break;
 
-        case "quarterly":
-          const quarter = Math.floor(selectedMonth / 3) + 1;
-          const quarterStart = new Date(currentYear, (quarter - 1) * 3, 1);
-          const quarterEnd = new Date(currentYear, quarter * 3, 0);
+      case "quarterly":
+        const quarter = Math.floor(month / 3) + 1;
+        const quarterStart = new Date(year, (quarter - 1) * 3, 1);
+        const quarterEnd = new Date(year, quarter * 3, 0);
 
-          revenueData = await PaymentHistory.findAll({
-            attributes: [
-              [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
-            ],
-            where: {
-              transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
-              transaction_date: {
-                [Op.between]: [quarterStart, quarterEnd],
-              },
+        revenueData = await PaymentHistory.findAll({
+          attributes: [
+            [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
+          ],
+          where: {
+            transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
+            transaction_date: {
+              [Op.between]: [quarterStart, quarterEnd],
             },
-            raw: true,
-          });
+          },
+          raw: true,
+        });
 
-          revenueData = [
-            {
-              period: `Q${quarter}`,
-              revenue: parseFloat(revenueData[0]?.revenue || 0),
+        revenueData = [
+          {
+            period: `Q${quarter}`,
+            revenue: parseFloat(revenueData[0]?.revenue || 0),
+          },
+        ];
+        break;
+
+      case "monthly":
+        const monthStart = new Date(year, month, 1);
+        const monthEnd = new Date(year, month + 1, 0);
+
+        revenueData = await PaymentHistory.findAll({
+          attributes: [
+            [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
+          ],
+          where: {
+            transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
+            transaction_date: {
+              [Op.between]: [monthStart, monthEnd],
             },
-          ];
-          break;
+          },
+          raw: true,
+        });
 
-        case "monthly":
-          const monthStart = new Date(currentYear, selectedMonth, 1);
-          const monthEnd = new Date(currentYear, selectedMonth + 1, 0);
+        revenueData = [
+          {
+            period: MONTH_NAMES[month],
+            revenue: parseFloat(revenueData[0]?.revenue || 0),
+          },
+        ];
+        break;
 
-          revenueData = await PaymentHistory.findAll({
-            attributes: [
-              [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
-            ],
-            where: {
-              transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
-              transaction_date: {
-                [Op.between]: [monthStart, monthEnd],
-              },
-            },
-            raw: true,
-          });
-
-          revenueData = [
-            {
-              period: MONTH_NAMES[selectedMonth],
-              revenue: parseFloat(revenueData[0]?.revenue || 0),
-            },
-          ];
-          break;
-
-        default:
-          revenueData = await PaymentHistory.findAll({
-            attributes: [
-              [
-                sequelize.fn(
-                  "EXTRACT",
-                  sequelize.literal("MONTH FROM transaction_date")
-                ),
-                "month",
-              ],
-              [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
-            ],
-            where: {
-              transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
-              transaction_date: {
-                [Op.between]: [
-                  new Date(`${currentYear}-01-01`),
-                  new Date(`${currentYear}-12-31`),
-                ],
-              },
-            },
-            group: [
+      default:
+        // All months for the year
+        revenueData = await PaymentHistory.findAll({
+          attributes: [
+            [
               sequelize.fn(
                 "EXTRACT",
                 sequelize.literal("MONTH FROM transaction_date")
               ),
+              "month",
             ],
-            order: [
-              [
-                sequelize.fn(
-                  "EXTRACT",
-                  sequelize.literal("MONTH FROM transaction_date")
-                ),
-                "ASC",
+            [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
+          ],
+          where: {
+            transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
+            transaction_date: {
+              [Op.between]: [
+                new Date(`${year}-01-01`),
+                new Date(`${year}-12-31`),
               ],
+            },
+          },
+          group: [
+            sequelize.fn(
+              "EXTRACT",
+              sequelize.literal("MONTH FROM transaction_date")
+            ),
+          ],
+          order: [
+            [
+              sequelize.fn(
+                "EXTRACT",
+                sequelize.literal("MONTH FROM transaction_date")
+              ),
+              "ASC",
             ],
-            raw: true,
-          });
+          ],
+          raw: true,
+        });
 
-          // Fill in missing months with zero revenue
-          const allMonths = Array.from({ length: 12 }, (_, i) => ({
-            month: i + 1,
-            revenue: 0,
-          }));
+        // Fill in missing months
+        const allMonths = Array.from({ length: 12 }, (_, i) => ({
+          month: i + 1,
+          revenue: 0,
+        }));
 
-          revenueData.forEach((item) => {
-            const monthIndex = parseInt(item.month) - 1;
-            if (monthIndex >= 0 && monthIndex < 12) {
-              allMonths[monthIndex].revenue = parseFloat(item.revenue || 0);
-            }
-          });
+        revenueData.forEach((item) => {
+          const monthIndex = parseInt(item.month) - 1;
+          if (monthIndex >= 0 && monthIndex < 12) {
+            allMonths[monthIndex].revenue = parseFloat(item.revenue || 0);
+          }
+        });
 
-          revenueData = allMonths.map((item) => ({
-            name: MONTH_NAMES[item.month - 1],
-            revenue: item.revenue,
-          }));
-      }
-
-      return res.json({
-        status: "success",
-        data: {
-          expenses: expenseBreakdown.map((item) => ({
-            name:
-              item.payment_type.charAt(0).toUpperCase() +
-              item.payment_type.slice(1),
-            value: parseFloat(item.value || 0),
-          })),
-          revenue: revenueData,
-        },
-      });
-    } catch (error) {
-      console.error("Error fetching filtered data:", error);
-      return res.status(500).json({
-        error: "Failed to fetch filtered data",
-        details: error.message,
-      });
+        revenueData = allMonths.map((item) => ({
+          name: MONTH_NAMES[item.month - 1],
+          revenue: item.revenue,
+        }));
     }
+
+    return revenueData;
   }
 
   async getFilteredRevenue(req, res) {
@@ -390,7 +342,7 @@ class DashboardController {
         ...(item.quarter && { quarter: `Q${item.quarter}` }),
       }));
 
-      console.log("Filtered Revenue Data:", formattedData);
+      // console.log("Filtered Revenue Data:", formattedData);
 
       return res.status(200).json({
         status: "success",
@@ -424,59 +376,136 @@ class DashboardController {
   }
 
   async getDashboardData(req, res) {
-    // At the top of your DashboardController class
-    const MONTH_NAMES = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-
     try {
-      console.log("Fetching Dashboard Data");
       const { month, year, revenueTimeframe } = req.query;
+      const currentYear = parseInt(year) || new Date().getFullYear();
+      const currentMonth = parseInt(month) || new Date().getMonth();
 
-      // Total Car Expenses
-      const totalExpenses = await CarPayments.findOne({
+      const monthlyRevenue = await DayBook.findAll({
         attributes: [
-          [sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
+          [
+            sequelize.fn(
+              "EXTRACT",
+              sequelize.literal("MONTH FROM transaction_date")
+            ),
+            "month"
+          ],
+          [
+            sequelize.fn(
+              "EXTRACT",
+              sequelize.literal("YEAR FROM transaction_date")
+            ),
+            "year"
+          ],
+          [sequelize.fn("SUM", sequelize.col("amount")), "revenue"]
         ],
-        raw: true,
+        where: {
+          transaction_type: "CREDIT",
+          voucher_type: {
+            [Op.in]: ["Sales", "Receipt", "sales", "receipt", "SALES", "RECEIPT"]
+          },
+          transaction_date: {
+            [Op.between]: [
+              new Date(currentYear, 0, 1),  // Start of the year
+              new Date(currentYear, 11, 31) // End of the year
+            ]
+          }
+        },
+        group: [
+          sequelize.fn(
+            "EXTRACT",
+            sequelize.literal("MONTH FROM transaction_date")
+          ),
+          sequelize.fn(
+            "EXTRACT",
+            sequelize.literal("YEAR FROM transaction_date")
+          )
+        ],
+        order: [
+          [
+            sequelize.fn(
+              "EXTRACT",
+              sequelize.literal("MONTH FROM transaction_date")
+            ),
+            "ASC"
+          ]
+        ],
+        raw: true
       });
-
-      // Parallel data fetching for better performance
+  
+      // Debug logging
+      console.log("Monthly Revenue Raw Data:", monthlyRevenue);
+  
+      // Process Monthly Revenue
+      const MONTH_NAMES = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+      ];
+  
+      // Create a map of all months initialized with 0 revenue
+      const monthlyRevenueMap = new Map(
+        MONTH_NAMES.map((name, index) => [index + 1, { name, revenue: 0 }])
+      );
+  
+      // Populate the map with actual revenue data
+      monthlyRevenue.forEach(item => {
+        const monthNumber = parseInt(item.month);
+        if (monthNumber >= 1 && monthNumber <= 12) {
+          monthlyRevenueMap.get(monthNumber).revenue = parseFloat(item.revenue || 0);
+        }
+      });
+  
+      // Convert map to array, sorted by month
+      const processedMonthlyRevenue = Array.from(monthlyRevenueMap.values());
+      console.log("Monthly Revenue: ",monthlyRevenue);
+      // Parallel data fetching
       const [
         totalCars,
-        total_Expenses,
+        totalExpenses,
         totalRevenue,
         totalInvoices,
-        totalRemainingAmount, // Add this
-        monthlyRevenue,
+        totalRemainingAmount,
         expenseBreakdown,
         invoiceStatusBreakdown,
+        filteredExpenseBreakdown,
+        filteredRevenue,
+        daybookDebitTransactions,
       ] = await Promise.all([
+        // Total Cars
         Cars.count(),
-        CompanyStats.findOne({
-          attributes: ["total_expenses", "total_revenue"],
-          where: { id: 1 },
-          raw: true,
-        }),
-        PaymentHistory.sum("amount", {
-          where: {
-            transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
-          },
+
+        // Total Expenses
+        CarPayments.sum("amount", {
+          where:
+            month && year
+              ? {
+                  [Op.and]: [
+                    sequelize.where(
+                      sequelize.fn(
+                        "EXTRACT",
+                        sequelize.literal("MONTH FROM payment_date")
+                      ),
+                      currentMonth + 1
+                    ),
+                    sequelize.where(
+                      sequelize.fn(
+                        "EXTRACT",
+                        sequelize.literal("YEAR FROM payment_date")
+                      ),
+                      currentYear
+                    ),
+                  ],
+                }
+              : {},
         }),
 
+        // Total Revenue
+        Invoice.sum("grand_total"),
+
+        // Total Invoices
         Invoice.count(),
 
+        // Total Remaining Amount
         Invoice.sum("remaining_amount", {
           where: {
             payment_status: {
@@ -485,52 +514,18 @@ class DashboardController {
           },
         }),
 
-        // PostgreSQL-specific month extraction
-        PaymentHistory.findAll({
-          attributes: [
-            [
-              sequelize.fn(
-                "date_trunc",
-                "month",
-                sequelize.col("transaction_date")
-              ),
-              "month",
-            ],
-            [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
-          ],
-          where: {
-            transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
-          },
-          group: [
-            sequelize.fn(
-              "date_trunc",
-              "month",
-              sequelize.col("transaction_date")
-            ),
-          ],
-          order: [
-            [
-              sequelize.fn(
-                "date_trunc",
-                "month",
-                sequelize.col("transaction_date")
-              ),
-              "ASC",
-            ],
-          ],
-          raw: true,
-        }),
-
+        // Monthly Revenue
+        // Expense Breakdown
         CarPayments.findAll({
           attributes: [
             "payment_type",
-            // 'payment_date',
             [sequelize.fn("SUM", sequelize.col("amount")), "value"],
-            // 'notes'
           ],
           group: ["payment_type"],
           raw: true,
         }),
+
+        // Invoice Status Breakdown
         Invoice.findAll({
           attributes: [
             "status",
@@ -539,260 +534,199 @@ class DashboardController {
           group: ["status"],
           raw: true,
         }),
+
+        // Filtered Expense Breakdown
+        CarPayments.findAll({
+          attributes: [
+            "payment_type",
+            [sequelize.fn("SUM", sequelize.col("amount")), "value"],
+          ],
+          where:
+            month && year
+              ? {
+                  [Op.and]: [
+                    sequelize.where(
+                      sequelize.fn(
+                        "EXTRACT",
+                        sequelize.literal("MONTH FROM payment_date")
+                      ),
+                      currentMonth + 1
+                    ),
+                    sequelize.where(
+                      sequelize.fn(
+                        "EXTRACT",
+                        sequelize.literal("YEAR FROM payment_date")
+                      ),
+                      currentYear
+                    ),
+                  ],
+                }
+              : {},
+          group: ["payment_type"],
+          raw: true,
+        }),
+
+        // Filtered Revenue
+        this.getFilteredRevenueData(
+          revenueTimeframe,
+          currentYear,
+          currentMonth
+        ),
+
+        DayBook.findAll({
+          attributes: [
+            "party_type",
+            [sequelize.fn("SUM", sequelize.col("amount")), "total_amount"],
+            [
+              sequelize.fn("COUNT", sequelize.col("transaction_id")),
+              "transaction_count",
+            ],
+          ],
+          where: {
+            transaction_type: "DEBIT",
+            party_type: {
+              [Op.in]: ["Customer", "Vendor", "Other"],
+            },
+            ...(month && year
+              ? {
+                  [Op.and]: [
+                    sequelize.where(
+                      sequelize.fn(
+                        "EXTRACT",
+                        sequelize.literal("MONTH FROM transaction_date")
+                      ),
+                      currentMonth + 1
+                    ),
+                    sequelize.where(
+                      sequelize.fn(
+                        "EXTRACT",
+                        sequelize.literal("YEAR FROM transaction_date")
+                      ),
+                      currentYear
+                    ),
+                  ],
+                }
+              : {}),
+          },
+          group: ["party_type"],
+          order: [[sequelize.fn("SUM", sequelize.col("amount")), "DESC"]],
+          raw: true,
+        }),
       ]);
 
-      // Format monthly revenue
-      const formattedMonthlyRevenue = monthlyRevenue
-        .map((item) => ({
-          month: item.month ? new Date(item.month).getMonth() + 1 : null,
-          revenue: parseFloat(item.revenue || 0),
-        }))
-        .filter((item) => item.month !== null);
+      const purchaseInvoices = await PurchaseInvoice.sum("total_amount");
+      console.log(purchaseInvoices);
 
-      // In getDashboardData method, update the filteredExpenseBreakdown query:
-      const filteredExpenseBreakdown = await CarPayments.findAll({
-        attributes: [
-          "payment_type",
-          [sequelize.fn("SUM", sequelize.col("amount")), "value"],
-        ],
-        where: {
-          [Op.and]: [
-            sequelize.where(
-              sequelize.fn(
-                "EXTRACT",
-                sequelize.literal("MONTH FROM payment_date")
-              ),
-              parseInt(month) + 1
-            ),
-            sequelize.where(
-              sequelize.fn(
-                "EXTRACT",
-                sequelize.literal("YEAR FROM payment_date")
-              ),
-              parseInt(year)
-            ),
-          ],
-        },
-        group: ["payment_type"],
-        order: [[sequelize.fn("SUM", sequelize.col("amount")), "DESC"]],
-        raw: true,
-      });
-
-      // Transform the data
-      const formattedExpenseBreakdown = filteredExpenseBreakdown.map(
+      const formattedDaybookDebitTransactions = daybookDebitTransactions.map(
         (item) => ({
-          payment_type: item.payment_type,
-          value: parseFloat(item.value || 0),
+          party_type: item.party_type || "Unknown",
+          total_amount: parseFloat(item.total_amount || 0),
+          transaction_count: parseInt(item.transaction_count || 0),
         })
       );
-      console.log("Data", filteredExpenseBreakdown);
 
-      // Add filtered revenue data
-      // Inside getDashboardData method, update the filteredRevenue section:
-      let filteredRevenue = [];
-      if (revenueTimeframe) {
-        const currentYear = year || new Date().getFullYear();
+      // Calculate total debit amount from Daybook
+      const totalDaybookDebitAmount = formattedDaybookDebitTransactions.reduce(
+        (sum, item) => sum + item.total_amount,
+        0
+      );
 
-        switch (revenueTimeframe) {
-          case "yearly":
-            filteredRevenue = await PaymentHistory.findAll({
-              attributes: [
-                [
-                  sequelize.fn(
-                    "EXTRACT",
-                    sequelize.literal("YEAR FROM transaction_date")
-                  ),
-                  "year",
-                ],
-                [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
-              ],
-              where: {
-                transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
-              },
-              group: [
-                sequelize.fn(
-                  "EXTRACT",
-                  sequelize.literal("YEAR FROM transaction_date")
-                ),
-              ],
-              order: [
-                [
-                  sequelize.fn(
-                    "EXTRACT",
-                    sequelize.literal("YEAR FROM transaction_date")
-                  ),
-                  "ASC",
-                ],
-              ],
-              raw: true,
-            });
-            break;
-
-          case "quarterly":
-            const quarterNumber = Math.floor((parseInt(month) || 0) / 3) + 1;
-            const quarterStart = new Date(
-              currentYear,
-              (quarterNumber - 1) * 3,
-              1
-            );
-            const quarterEnd = new Date(currentYear, quarterNumber * 3, 0);
-
-            filteredRevenue = await PaymentHistory.findAll({
-              attributes: [
-                [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
-              ],
-              where: {
-                transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
-                transaction_date: {
-                  [Op.between]: [quarterStart, quarterEnd],
-                },
-              },
-              raw: true,
-            });
-
-            // Transform the result to include the quarter
-            filteredRevenue = filteredRevenue.map((item) => ({
-              period: `Q${quarterNumber}`,
-              revenue: parseFloat(item.revenue || 0),
-            }));
-            break;
-
-          case "monthly":
-            const monthStart = new Date(currentYear, parseInt(month) || 0, 1);
-            const monthEnd = new Date(
-              currentYear,
-              (parseInt(month) || 0) + 1,
-              0
-            );
-
-            filteredRevenue = await PaymentHistory.findAll({
-              attributes: [
-                [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
-              ],
-              where: {
-                transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
-                transaction_date: {
-                  [Op.between]: [monthStart, monthEnd],
-                },
-              },
-              raw: true,
-            });
-
-            // Transform the result to include the month name
-            filteredRevenue = filteredRevenue.map((item) => ({
-              period: MONTH_NAMES[parseInt(month) || 0],
-              revenue: parseFloat(item.revenue || 0),
-            }));
-            break;
-
-          default: // 'all'
-            filteredRevenue = await PaymentHistory.findAll({
-              attributes: [
-                [
-                  sequelize.fn(
-                    "EXTRACT",
-                    sequelize.literal("MONTH FROM transaction_date")
-                  ),
-                  "month",
-                ],
-                [sequelize.fn("SUM", sequelize.col("amount")), "revenue"],
-              ],
-              where: {
-                transaction_type: ["INCOME_COMPANY_PAYMENT", "INCOME_INVOICE"],
-                transaction_date: {
-                  [Op.between]: [
-                    new Date(`${currentYear}-01-01`),
-                    new Date(`${currentYear}-12-31`),
-                  ],
-                },
-              },
-              group: [
-                sequelize.fn(
-                  "EXTRACT",
-                  sequelize.literal("MONTH FROM transaction_date")
-                ),
-              ],
-              order: [
-                [
-                  sequelize.fn(
-                    "EXTRACT",
-                    sequelize.literal("MONTH FROM transaction_date")
-                  ),
-                  "ASC",
-                ],
-              ],
-              raw: true,
-            });
-
-            // Transform to include all months with 0 revenue for missing months
-            const allMonthsData = Array.from({ length: 12 }, (_, i) => ({
-              month: i + 1,
-              revenue: 0,
-            }));
-
-            filteredRevenue.forEach((item) => {
-              const monthIndex = parseInt(item.month) - 1;
-              if (monthIndex >= 0 && monthIndex < 12) {
-                allMonthsData[monthIndex].revenue = parseFloat(
-                  item.revenue || 0
-                );
-              }
-            });
-
-            filteredRevenue = allMonthsData;
-            break;
-        }
-      }
-      // Format the revenue data
-      const formattedRevenue = filteredRevenue.map((item) => {
-        if (revenueTimeframe === "all") {
-          return {
-            month: parseInt(item.month),
-            revenue: parseFloat(item.revenue || 0),
-          };
-        } else {
-          return {
-            period: item.period,
-            revenue: parseFloat(item.revenue || 0),
-          };
-        }
-      });
-
-      console.log("formattedRevenue:", total_Expenses);
+      // Process and format data
+      // const processedMonthlyRevenue = monthlyRevenue
+      //   .map((item) => ({
+      //     month: item.month ? new Date(item.month).getMonth() + 1 : null,
+      //     revenue: parseFloat(item.revenue || 0),
+      //   }))
+      //   .filter((item) => item.month !== null);
 
       return res.status(200).json({
         totalCars,
-        totalExpenses: parseFloat(totalExpenses?.total_amount || 0),
-        totalRevenue,
+        totalExpenses: parseFloat(totalExpenses || 0),
+        totalRevenue: parseFloat(totalRevenue || 0),
         totalInvoices,
-        monthlyRevenue: formattedMonthlyRevenue,
-        expenseBreakdown,
+        monthlyRevenue: processedMonthlyRevenue,
+        expenseBreakdown: expenseBreakdown.map((item) => ({
+          payment_type: item.payment_type,
+          value: parseFloat(item.value || 0),
+        })),
         invoiceStatusBreakdown,
-        formattedExpenseBreakdown,
-        total_expenses: total_Expenses?.total_expenses || 0,
+        formattedExpenseBreakdown: filteredExpenseBreakdown.map((item) => ({
+          payment_type: item.payment_type,
+          value: parseFloat(item.value || 0),
+        })),
         totalRemainingAmount: parseFloat(totalRemainingAmount || 0),
-        filteredRevenue:
-          revenueTimeframe === "all"
-            ? filteredRevenue.map((item) => ({
-                name: MONTH_NAMES[item.month - 1],
-                revenue: item.revenue,
-              }))
-            : filteredRevenue.map((item) => ({
-                name: item.period,
-                revenue: item.revenue,
-              })),
+        filteredRevenue,
+        daybookDebitTransactions: formattedDaybookDebitTransactions,
+        totalDaybookDebitAmount,
+        daybookDebitTransactionBreakdown: {
+          total_amount: totalDaybookDebitAmount,
+          breakdown: formattedDaybookDebitTransactions,
+        },
+        purchaseInvoices,
       });
     } catch (error) {
-      console.error("Dashboard Data Fetch Error:", {
-        message: error.message,
-        name: error.name,
-        sql: error.sql,
-        stack: error.stack,
-      });
+      console.error("Dashboard Data Fetch Error:", error);
       res.status(500).json({
         error: "Internal server error",
         details: error.message,
-        sql: error.sql,
+      });
+    }
+  }
+
+  // Additional method for detailed debit transactions
+  async getDetailedDebitTransactions(req, res) {
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        category,
+        party_type,
+        start_date,
+        end_date,
+      } = req.query;
+
+      const offset = (page - 1) * limit;
+
+      // Build where conditions
+      const whereConditions = {
+        transaction_type: "DEBIT",
+      };
+
+      if (category) whereConditions.category = category;
+      if (party_type) whereConditions.party_type = party_type;
+
+      if (start_date && end_date) {
+        whereConditions.transaction_date = {
+          [Op.between]: [new Date(start_date), new Date(end_date)],
+        };
+      }
+
+      // Fetch paginated transactions
+      const { count, rows: transactions } = await DayBook.findAndCountAll({
+        where: whereConditions,
+        order: [["transaction_date", "DESC"]],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      });
+
+      return res.status(200).json({
+        total_transactions: count,
+        current_page: page,
+        total_pages: Math.ceil(count / limit),
+        transactions: transactions.map((transaction) => ({
+          ...transaction.toJSON(),
+          amount: parseFloat(transaction.amount),
+        })),
+      });
+    } catch (error) {
+      console.error("Detailed Debit Transactions Error:", {
+        message: error.message,
+        stack: error.stack,
+      });
+
+      res.status(500).json({
+        error: "Failed to fetch detailed debit transactions",
+        details: error.message,
       });
     }
   }
@@ -802,7 +736,7 @@ class DashboardController {
   async getTotalCarsCount(req, res) {
     try {
       const count = await Cars.count();
-      console.log("Counting ", count);
+      // console.log("Counting ", count);
       res.json({ count });
     } catch (error) {
       res.status(500).json({

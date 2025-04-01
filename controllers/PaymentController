@@ -6,7 +6,7 @@ class PaymentController {
       const { carId } = req.params;
       const { startDate, endDate } = req.query;
       const payments=await PaymentService.getAdvancePayment(carId, startDate, endDate);
-      console.log(payments);
+      // console.log(payments);
       res.json({
         status: 'success',
         payments: payments

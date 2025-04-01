@@ -27,14 +27,14 @@ const cacheMiddleware = (duration) => async (req, res, next) => {
       key = req.originalUrl;
     }
 
-    console.log(`Checking cache for key: ${key}`);
+    // console.log(`Checking cache for key: ${key}`);
     const cachedResponse = await cacheService.get(key);
     if (cachedResponse) {
-      console.log(`Cache hit for ${key}`);
+      // console.log(`Cache hit for ${key}`);
       return res.json(cachedResponse);
     }
 
-    console.log(`Cache miss for ${key}`);
+    // console.log(`Cache miss for ${key}`);
     res.originalJson = res.json;
     res.json = (body) => {
       cacheService.set(key, body, duration);
@@ -58,14 +58,14 @@ const paymentCacheMiddleware = (duration) => async (req, res, next) => {
     const companyId = req.params.companyId;
     const key = generatePaymentHistoryCacheKey(companyId, req.query);
 
-    console.log(`Checking cache for payment history key: ${key}`);
+    // console.log(`Checking cache for payment history key: ${key}`);
     const cachedResponse = await cacheService.get(key);
     if (cachedResponse) {
-      console.log(`Cache hit for payment history: ${key}`);
+      // console.log(`Cache hit for payment history: ${key}`);
       return res.json(cachedResponse);
     }
 
-    console.log(`Cache miss for payment history: ${key}`);
+    // console.log(`Cache miss for payment history: ${key}`);
     res.originalJson = res.json;
     res.json = (body) => {
       cacheService.set(key, body, duration);
@@ -74,7 +74,7 @@ const paymentCacheMiddleware = (duration) => async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Payment cache middleware error:", error);
+    // console.error("Payment cache middleware error:", error);
     next();
   }
 };
@@ -96,14 +96,14 @@ const carCacheMiddleware = (duration) => async (req, res, next) => {
       key = req.originalUrl;
     }
 
-    console.log(`Checking cache for car key: ${key}`);
+    // console.log(`Checking cache for car key: ${key}`);
     const cachedResponse = await cacheService.get(key);
     if (cachedResponse) {
-      console.log(`Cache hit for car: ${key}`);
+      // console.log(`Cache hit for car: ${key}`);
       return res.json(cachedResponse);
     }
 
-    console.log(`Cache miss for car: ${key}`);
+    // console.log(`Cache miss for car: ${key}`);
     res.originalJson = res.json;
     res.json = (body) => {
       cacheService.set(key, body, duration);
@@ -112,7 +112,7 @@ const carCacheMiddleware = (duration) => async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Car cache middleware error:", error);
+    // console.error("Car cache middleware error:", error);
     next();
   }
 };
@@ -125,16 +125,16 @@ const clearCacheMiddleware = (patterns) => async (req, res, next) => {
       try {
         if (body.status === "success") {
           await cacheService.clearMultiplePatterns(patterns);
-          console.log(`Cleared cache for patterns:`, patterns);
+          // console.log(`Cleared cache for patterns:`, patterns);
         }
       } catch (error) {
-        console.error(`Error clearing cache patterns:`, error);
+        // console.error(`Error clearing cache patterns:`, error);
       }
       originalJson.call(res, body);
     };
     next();
   } catch (error) {
-    console.error("Clear cache middleware error:", error);
+    // console.error("Clear cache middleware error:", error);
     next();
   }
 };
@@ -146,16 +146,16 @@ const clearPaymentCacheMiddleware = (patterns) => async (req, res, next) => {
       try {
         if (body.status === "success") {
           await cacheService.clearMultiplePatterns(patterns);
-          console.log(`Cleared cache for patterns:`, patterns);
+          // console.log(`Cleared cache for patterns:`, patterns);
         }
       } catch (error) {
-        console.error(`Error clearing cache patterns:`, error);
+        // console.error(`Error clearing cache patterns:`, error);
       }
       originalJson.call(res, body);
     };
     next();
   } catch (error) {
-    console.error("Clear cache middleware error:", error);
+    // console.error("Clear cache middleware error:", error);
     next();
   }
 };
@@ -168,16 +168,16 @@ const AssignedCarsCacheMiddleware = (duration) => async (req, res, next) => {
   try {
     const carId = req.params.carId;
     const key = generateCarsAssignedToCompanyKey(carId, req.query);
-    console.log(key);
+    // console.log(key);
 
-    console.log(`Checking cache for payment history key: ${key}`);
+    // console.log(`Checking cache for payment history key: ${key}`);
     const cachedResponse = await cacheService.get(key);
     if (cachedResponse) {
-      console.log(`Cache hit for payment history: ${key}`);
+      // console.log(`Cache hit for payment history: ${key}`);
       return res.json(cachedResponse);
     }
 
-    console.log(`Cache miss for payment history: ${key}`);
+    // console.log(`Cache miss for payment history: ${key}`);
     res.originalJson = res.json;
     res.json = (body) => {
       cacheService.set(key, body, duration);
@@ -186,7 +186,7 @@ const AssignedCarsCacheMiddleware = (duration) => async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Payment cache middleware error:", error);
+    // console.error("Payment cache middleware error:", error);
     next();
   }
 };
@@ -199,16 +199,16 @@ const AvailableCompaniesToAssing = (duration) => async (req, res, next) => {
   try {
     const carId = req.params.carId;
     const key = generateAvailableCompaniesToAssignKey(carId, req.query);
-    console.log(key);
+    // console.log(key);
 
-    console.log(`Checking cache for payment history key: ${key}`);
+    // console.log(`Checking cache for payment history key: ${key}`);
     const cachedResponse = await cacheService.get(key);
     if (cachedResponse) {
-      console.log(`Cache hit for payment history: ${key}`);
+      // console.log(`Cache hit for payment history: ${key}`);
       return res.json(cachedResponse);
     }
 
-    console.log(`Cache miss for payment history: ${key}`);
+    // console.log(`Cache miss for payment history: ${key}`);
     res.originalJson = res.json;
     res.json = (body) => {
       cacheService.set(key, body, duration);
@@ -217,7 +217,7 @@ const AvailableCompaniesToAssing = (duration) => async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Payment cache middleware error:", error);
+    // console.error("Payment cache middleware error:", error);
     next();
   }
 };
@@ -231,14 +231,14 @@ const AdvancepaymentCacheMiddleware = (duration) => async (req, res, next) => {
     const carId = req.params.carId;
     const key = generatePaymentHistoryCacheKey(carId, req.query);
 
-    console.log(`Checking cache for payment history key: ${key}`);
+    // console.log(`Checking cache for payment history key: ${key}`);
     const cachedResponse = await cacheService.get(key);
     if (cachedResponse) {
-      console.log(`Cache hit for payment history: ${key}`);
+      // console.log(`Cache hit for payment history: ${key}`);
       return res.json(cachedResponse);
     }
 
-    console.log(`Cache miss for payment history: ${key}`);
+    // console.log(`Cache miss for payment history: ${key}`);
     res.originalJson = res.json;
     res.json = (body) => {
       cacheService.set(key, body, duration);
@@ -247,7 +247,7 @@ const AdvancepaymentCacheMiddleware = (duration) => async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Payment cache middleware error:", error);
+    // console.error("Payment cache middleware error:", error);
     next();
   }
 };
@@ -260,14 +260,14 @@ const DashboardDataCacheMiddleware = (duration) => async (req, res, next) => {
   try {
     const key = generateDashboardDataCacheKey(req.query);
 
-    console.log(`Checking cache for Dashboard history key: ${key}`);
+    // console.log(`Checking cache for Dashboard history key: ${key}`);
     const cachedResponse = await cacheService.get(key);
     if (cachedResponse) {
-      console.log(`Cache hit for Dashboard history: ${key}`);
+      // console.log(`Cache hit for Dashboard history: ${key}`);
       return res.json(cachedResponse);
     }
 
-    console.log(`Cache miss for Dashboard history: ${key}`);
+    // console.log(`Cache miss for Dashboard history: ${key}`);
     res.originalJson = res.json;
     res.json = (body) => {
       cacheService.set(key, body, duration);
@@ -276,7 +276,7 @@ const DashboardDataCacheMiddleware = (duration) => async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Payment cache middleware error:", error);
+    // console.error("Payment cache middleware error:", error);
     next();
   }
 };

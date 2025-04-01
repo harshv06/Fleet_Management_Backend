@@ -12,6 +12,7 @@ const ReportController=require("../../controllers/DayBook/CategoryReportControll
 // Get transactions with filters
 router.get("/daybook/transactions", DayBookController.getTransactions);
 
+router.get("/daybook/transactions/:transactionId", DayBookController.getTransaction);
 // Get monthly report
 router.get(
   "/daybook/monthly-report/:year/:month",

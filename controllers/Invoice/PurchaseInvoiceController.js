@@ -113,7 +113,7 @@ class PurchaseInvoiceController {
   async getPurchaseDistribution(req, res) {
     try {
       const { startDate, endDate } = req.query;
-      console.log("Dates:",startDate, endDate);
+      // console.log("Dates:",startDate, endDate);
       const distribution = await PurchaseTransaction.findAll({
         attributes: [
           "vendor_name",

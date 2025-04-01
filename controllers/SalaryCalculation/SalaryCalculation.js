@@ -6,7 +6,7 @@ class SalaryCalculationController {
   static async create(req, res) {
     try {
       const result = await SalaryCalculationService.create(req.body);
-      console.log("Here",result);
+      // console.log("Here",result);
       res.status(201).json(result);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -14,7 +14,7 @@ class SalaryCalculationController {
   }
 
   static async getAll(req, res) {
-    console.log("getAll");
+    // console.log("getAll");
     try {
       const calculations = await SalaryCalculationService.getAll();
       res.json(calculations);

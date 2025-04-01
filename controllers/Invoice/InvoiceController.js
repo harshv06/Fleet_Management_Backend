@@ -1,4 +1,12 @@
 const InvoiceService = require("../../services/InvoiceService");
+const {
+  Invoice,
+  Company,
+  InvoiceItems,
+  PaymentHistory,
+} = require("../../models/index");
+const { Op } = require("sequelize");
+
 class InvoiceController {
   static async createInvoice(req, res) {
     try {
@@ -28,45 +36,79 @@ class InvoiceController {
       // Validate input
       if (!amount || amount <= 0) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Invalid payment amount'
+          status: "error",
+          message: "Invalid payment amount",
         });
       }
 
+      const cleanInvoiceId = invoiceId.trim();
+
+      // Record payment
       const result = await InvoiceService.recordPayment(
-        invoiceId,
+        cleanInvoiceId,
         amount,
         payment_method
       );
 
       // Fetch updated invoice with all related data
-      const updatedInvoice = await Invoice.findByPk(invoiceId, {
+      const updatedInvoice = await Invoice.findOneByIdentifier(cleanInvoiceId, {
         include: [
           {
             model: Company,
-            as: 'invoiceCompany',
+            as: "invoiceCompany",
+            attributes: ["company_id", "company_name", "gst_number", "address"],
           },
           {
             model: InvoiceItems,
-            as: 'invoiceItems'
+            as: "invoiceItems",
+            attributes: [
+              "item_id",
+              "description",
+              "hsn_code",
+              "quantity",
+              "rate",
+              "amount",
+            ],
           },
           {
             model: PaymentHistory,
-            as: 'payments',
-            attributes: ['amount', 'transaction_date', 'payment_method']
-          }
-        ]
+            as: "transactionHistories",
+            attributes: ["transaction_id", "amount", "transaction_date"],
+            where: {
+              transaction_type: {
+                [Op.in]: [
+                  "INCOME_INVOICE",
+                  "INVOICE_REVENUE",
+                  "INVOICE_STATUS_CHANGE",
+                ],
+              },
+            },
+            required: false, // Make this a left outer join
+          },
+        ],
       });
 
+      // If no invoice found, throw an error
+      if (!updatedInvoice) {
+        return res.status(404).json({
+          status: "error",
+          message: "Invoice not found",
+        });
+      }
+
       res.status(200).json({
-        status: 'success',
-        message: 'Payment recorded successfully',
-        data: updatedInvoice
+        status: "success",
+        message: "Payment recorded successfully",
+        data: updatedInvoice,
       });
     } catch (error) {
+      console.error("Payment recording error:", error);
       res.status(500).json({
-        status: 'error',
-        message: error.message
+        status: "error",
+        message: error.message,
+        ...(process.env.NODE_ENV === "development" && {
+          stack: error.stack,
+        }),
       });
     }
   }
@@ -102,8 +144,6 @@ class InvoiceController {
       });
     }
   }
-
-
   // Update Invoice Status
   static async updateInvoiceStatus(req, res) {
     try {
@@ -157,15 +197,15 @@ class InvoiceController {
     try {
       const { invoiceId } = req.params;
       const invoice = await InvoiceService.getInvoiceById(invoiceId);
-      
+
       res.status(200).json({
-        status: 'success',
-        data: { invoice }
+        status: "success",
+        data: { invoice },
       });
     } catch (error) {
       res.status(404).json({
-        status: 'error',
-        message: error.message
+        status: "error",
+        message: error.message,
       });
     }
   }
@@ -174,19 +214,19 @@ class InvoiceController {
     try {
       const { invoiceId } = req.params;
       const pdfPath = await InvoiceService.generateInvoicePDF(invoiceId);
-      
+
       res.download(pdfPath, `Invoice_${invoiceId}.pdf`, (err) => {
         if (err) {
           res.status(500).json({
-            status: 'error',
-            message: 'Could not download the file'
+            status: "error",
+            message: "Could not download the file",
           });
         }
       });
     } catch (error) {
       res.status(500).json({
-        status: 'error',
-        message: error.message
+        status: "error",
+        message: error.message,
       });
     }
   }

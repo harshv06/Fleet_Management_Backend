@@ -6,7 +6,7 @@ const TransactionTrackingService = require("../../services/TransactionService");
 
 class InventoryController {
   static async getCompanyStats(req, res) {
-    console.log(req.user);
+    // console.log(req.user);
     if (req.user.role !== "SUPER_ADMIN") {
       return res.status(403).json({
         message: "Access denied",

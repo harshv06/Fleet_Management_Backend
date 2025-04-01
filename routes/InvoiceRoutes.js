@@ -12,7 +12,9 @@ router.post(
 );
 
 router.post(
-  '/invoices/:invoiceId/payment',
+  "/invoices/:invoiceId/payment",
+  validateToken,
+  clearCacheMiddleware(["dashboard_data_"]),
   InvoiceController.recordPayment
 );
 

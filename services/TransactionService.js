@@ -26,7 +26,7 @@ class TransactionTrackingService {
     const transaction = await sequelize.transaction();
     try {
       const {
-        transaction_type,
+        type,
         amount,
         source,
         sourceId,
@@ -34,11 +34,11 @@ class TransactionTrackingService {
         metadata = {},
       } = data;
 
-      console.log(data);
+      // console.log(data);
       // Record in PaymentHistory
       const transactionRecord = await PaymentHistory.create(
         {
-          transaction_type: transaction_type,
+          transaction_type: type,
           amount,
           transaction_source: source,
           reference_source_id: sourceId,
@@ -54,7 +54,7 @@ class TransactionTrackingService {
         await CompanyStats.updateTransactionStats(
           {
             company_id: sourceId,
-            transaction_type: transaction_type,
+            transaction_type: type,
             amount,
           },
           { transaction }

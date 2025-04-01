@@ -32,7 +32,7 @@ InventoryRouter.get(
   "/dashboard/filtered-data", // New endpoint for filtered data
   validateToken,
   checkPermission(PERMISSIONS.DASHBOARD.VIEW),
-  DashboardController.getFilteredData.bind(DashboardController)
+  DashboardController.getFilteredRevenueData
 );
 InventoryRouter.get(
   "/dashboard/filtered-revenue",

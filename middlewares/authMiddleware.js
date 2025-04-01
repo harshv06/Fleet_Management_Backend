@@ -66,11 +66,6 @@ const validateToken = async (req, res, next) => {
     // Get token from header
     const authHeader = req.headers.authorization;
 
-    // Detailed logging of incoming request
-    // console.log("Authorization Header:", authHeader);
-    // console.log("Request Headers:", req.headers);
-
-    // Check if authorization header exists
     if (!authHeader) {
       return res.status(401).json({
         success: false,
@@ -121,9 +116,6 @@ const validateToken = async (req, res, next) => {
       });
     }
 
-    // Log decoded token
-    // console.log("Decoded Token:", decoded);
-
     // Validate decoded token structure
     if (!decoded || !decoded.id) {
       return res.status(401).json({
@@ -134,7 +126,14 @@ const validateToken = async (req, res, next) => {
 
     // Find user in database
     const user = await User.findByPk(decoded.id, {
-      attributes: ["user_id", "username", "email", "role", "is_active"],
+      attributes: [
+        "user_id",
+        "username",
+        "email",
+        "role",
+        "is_active",
+        "permissions",
+      ],
     });
 
     // Check if user exists
@@ -153,17 +152,45 @@ const validateToken = async (req, res, next) => {
       });
     }
 
-    // Attach user to request with permissions
+    // Parse user permissions
+    let userPermissions = [];
+    try {
+      // First, try to parse permissions from the user model
+      if (typeof user.permissions === "string") {
+        userPermissions = JSON.parse(user.permissions);
+      } else if (Array.isArray(user.permissions)) {
+        userPermissions = user.permissions;
+      }
+
+      // If no user-specific permissions, use role-based
+      if (!userPermissions.length) {
+        userPermissions = ROLE_PERMISSIONS[user.role] || [];
+      }
+    } catch (parseError) {
+      console.error("Error parsing user permissions:", parseError);
+      userPermissions = ROLE_PERMISSIONS[user.role] || [];
+    }
+
+    // Combine role-based and user-specific permissions
+    const combinedPermissions = [
+      ...new Set([...(ROLE_PERMISSIONS[user.role] || []), ...userPermissions]),
+    ];
+
+    // Attach user to request with comprehensive permissions
     req.user = {
       id: user.user_id,
       username: user.username,
       email: user.email,
       role: user.role,
-      permissions: ROLE_PERMISSIONS[user.role] || [],
+      permissions: combinedPermissions,
     };
 
     // Log successful authentication
-    console.log("User Authenticated:", req.user);
+    console.log("User Authenticated:", {
+      id: req.user.id,
+      role: req.user.role,
+      permissionsCount: req.user.permissions.length,
+    });
 
     // Proceed to next middleware
     next();

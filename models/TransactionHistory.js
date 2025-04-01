@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        field: "transaction_id",
       },
       transaction_type: {
         type: DataTypes.ENUM(
@@ -17,7 +18,9 @@ module.exports = (sequelize, DataTypes) => {
           "EXPENSE_CAR_OTHER",
           "EXPENSE_GENERAL",
           "REVENUE",
-          "INVOICE_STATUS_CHANGE"
+          "INVOICE_STATUS_CHANGE",
+          "INVOICE_REVENUE",
+          "INVOICE_DELETE"
         ),
         allowNull: false,
       },
@@ -52,11 +55,22 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "INTERNAL",
       },
-      reference_source_id: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        comment: "ID of source (company_id, car_id, etc.)",
-      },
+      // reference_id: {
+      //   type: DataTypes.UUID,
+      //   allowNull: true,
+      //   field: "reference_id",
+      //   get() {
+      //     const rawValue = this.getDataValue("reference_id");
+      //     return rawValue ? rawValue.toString() : null;
+      //   },
+      //   set(value) {
+      //     // Ensure the value is stored as a UUID
+      //     this.setDataValue(
+      //       "reference_id",
+      //       value && typeof value === "string" ? value.trim() : value
+      //     );
+      //   },
+      // },
       payment_id: {
         type: DataTypes.INTEGER,
         allowNull: true,

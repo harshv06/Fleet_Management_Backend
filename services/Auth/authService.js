@@ -13,40 +13,80 @@ class AuthService {
       const user = await User.findOne({
         where: { email },
       });
-
+  
       if (!user) {
         throw new Error("User not found");
       }
-
+  
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
         throw new Error("Invalid credentials");
       }
-
+  
       if (!user.is_active) {
         throw new Error("User account is not active");
       }
-
+  
+      // Parse permissions
+      let parsedPermissions = [];
+      try {
+        // First, try to parse as JSON string
+        if (typeof user.permissions === "string") {
+          parsedPermissions = JSON.parse(user.permissions);
+        }
+        // If it's already an array, use it directly
+        else if (Array.isArray(user.permissions)) {
+          parsedPermissions = user.permissions;
+        }
+        // Fallback to role-based permissions
+        else {
+          parsedPermissions = ROLE_PERMISSIONS[user.role] || [];
+        }
+      } catch (parseError) {
+        console.error("Error parsing permissions:", parseError);
+        parsedPermissions = ROLE_PERMISSIONS[user.role] || [];
+      }
+  
+      // Ensure permissions is an array and contains only strings
+      parsedPermissions = Array.isArray(parsedPermissions) 
+        ? parsedPermissions.filter(p => typeof p === 'string')
+        : [];
+  
+      // Combine role-based and user-specific permissions
+      const combinedPermissions = [
+        ...new Set([
+          ...(ROLE_PERMISSIONS[user.role] || []),
+          ...parsedPermissions
+        ])
+      ];
+  
       const token = jwt.sign(
         {
           id: user.user_id,
           email: user.email,
           role: user.role,
-          permissions: ROLE_PERMISSIONS[user.role] || [],
+          // Ensure permissions is a plain array of strings
+          permissions: combinedPermissions,
         },
         "MATOSHREE",
-        { expiresIn: "1h" }
+        { 
+          expiresIn: "1h",
+          // Optional: Add additional encoding to handle complex data
+          encoding: 'utf8'
+        }
       );
-
+  
       return {
         token,
         user: {
           id: user.user_id,
           email: user.email,
           role: user.role,
+          permissions: combinedPermissions,
         },
       };
     } catch (error) {
+      console.error("Login error:", error);
       throw error;
     }
   }
