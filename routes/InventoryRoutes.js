@@ -19,7 +19,7 @@ InventoryRouter.get(
   "/dashboard",
   validateToken,
   checkPermission(PERMISSIONS.DASHBOARD.VIEW),
-  DashboardDataCacheMiddleware(300),
+  // DashboardDataCacheMiddleware(300),
   DashboardController.getDashboardData.bind(DashboardController)
 );
 
