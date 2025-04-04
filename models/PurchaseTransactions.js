@@ -92,5 +92,7 @@ module.exports = (sequelize, DataTypes) => {
     return distribution;
   };
 
+  
+
   return PurchaseTransaction;
 };
