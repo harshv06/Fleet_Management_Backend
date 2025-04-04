@@ -174,6 +174,45 @@ class PurchaseInvoiceController {
       });
     }
   }
+
+  async deletePurchaseInvoice(req, res) {
+    try {
+      const { invoiceId } = req.params;
+
+      // Validate input
+      if (!invoiceId) {
+        return res.status(400).json({
+          success: false,
+          message: "Invoice ID is required",
+        });
+      }
+
+      // Perform deletion
+      const deletedInvoice = await PurchaseInvoiceService.deletePurchaseInvoice(invoiceId);
+
+      res.json({
+        success: true,
+        message: "Invoice deleted successfully",
+        data: deletedInvoice,
+      });
+    } catch (error) {
+      console.error("Delete invoice error:", error);
+
+      // Handle specific error types
+      if (error.name === "SequelizeValidationError") {
+        return res.status(400).json({
+          success: false,
+          message: error.errors[0].message,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to delete invoice",
+        error: error.message,
+      });
+    }
+  }
 }
 
 module.exports = new PurchaseInvoiceController();

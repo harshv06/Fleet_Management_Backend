@@ -11,6 +11,7 @@ class InvoiceController {
   static async createInvoice(req, res) {
     try {
       // Create invoice
+      console.log("Creating invoice with data:", req.body);
       const result = await InvoiceService.createInvoice(req.body);
 
       res.status(201).json({

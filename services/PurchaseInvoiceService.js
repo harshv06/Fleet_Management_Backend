@@ -58,9 +58,9 @@ class PurchaseInvoiceService {
   async getAllPurchaseInvoices(page, limit, status) {
     try {
       const offset = (page - 1) * limit;
-      
+
       const whereClause = status ? { status: status } : {};
-  
+
       const { count, rows } = await PurchaseInvoice.findAndCountAll({
         where: whereClause,
         include: [
@@ -73,11 +73,11 @@ class PurchaseInvoiceService {
         offset,
         limit,
       });
-  
+
       return {
         invoices: rows,
         totalItems: count,
-        totalPages: Math.ceil(count / limit)
+        totalPages: Math.ceil(count / limit),
       };
     } catch (error) {
       console.error("Error fetching purchase invoices:", error);
@@ -287,6 +287,65 @@ class PurchaseInvoiceService {
       }));
     } catch (error) {
       throw error;
+    }
+  }
+
+  async deletePurchaseInvoice(invoiceId) {
+    const transaction = await sequelize.transaction();
+    console.log("deleteInvoice:", invoiceId);
+    try {
+      // Find invoice with all related data
+      const invoice = await PurchaseInvoice.findByPk(invoiceId, {
+        include: [
+          {
+            model: PurchaseInvoiceItem,
+            as: "items",
+          },
+          {
+            model: Company,
+            as: "vendor",
+          },
+        ],
+        transaction,
+      });
+
+      if (!invoice) {
+        throw new Error("Invoice not found");
+      }
+
+      // Prevent deletion of paid invoices
+      // if (invoice.status === "paid") {
+      //   throw new Error("Paid invoices cannot be deleted");
+      // }
+
+      // Delete associated invoice items
+      await PurchaseInvoiceItem.destroy({
+        where: { purchase_invoice_id: invoiceId },
+        transaction,
+      });
+
+      await PurchaseTransaction.destroy({
+        where: { purchase_invoice_id: invoiceId },
+        transaction,
+      });
+
+      // Delete the invoice
+      await invoice.destroy({ transaction });
+
+      await transaction.commit();
+
+      return {
+        status: "success",
+        message: "Invoice deleted successfully",
+        data: {
+          invoice_number: invoice.invoice_number,
+          company_name: invoice.invoiceCompany?.company_name,
+          deleted_at: new Date(),
+        },
+      };
+    } catch (error) {
+      await transaction.rollback();
+      throw new Error(`Failed to delete invoice: ${error.message}`);
     }
   }
 }
