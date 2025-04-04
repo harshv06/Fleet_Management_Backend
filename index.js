@@ -20,6 +20,7 @@ const SalaryCalculation = require("./routes/SalaryCalculations/SalaryCalculation
 const financialReportRoutes = require("./routes/FinancialReport/FinancialReportsRoutes");
 const DatabaseBackupRoutes = require("./routes/DatabaseBackup");
 const GSTReportRoutes = require("./routes/GST/Gst_Routes");
+const CompanyRoutes=require("./routes/CompanyProfile/CompanyProfileRoutes")
 // const { Sequelize, DataTypes } = require('sequelize');
 
 const app = express();
@@ -47,6 +48,7 @@ app.use("/api", BankAccountRoutes);
 app.use("/api", financialReportRoutes);
 app.use("/api", DatabaseBackupRoutes);
 app.use("/api", GSTReportRoutes);
+app.use("/api", CompanyRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

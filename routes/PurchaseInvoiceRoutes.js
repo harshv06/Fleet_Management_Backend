@@ -8,5 +8,6 @@ router.post("/createPurchaseInvocie", clearCacheMiddleware(["dashboard_data_"]),
 router.get("/PurchaseInvoices",PurchaseInvoiceController.getAllPurchaseInvoices);
 router.get("/:id", PurchaseInvoiceController.getPurchaseInvoiceById);
 router.patch("/purchase-invoices/:id/status", PurchaseInvoiceController.updateStatus);
+router.delete("/purchase-invoices/:invoiceId", clearCacheMiddleware(["dashboard_data_"]), PurchaseInvoiceController.deletePurchaseInvoice);
 
 module.exports = router;

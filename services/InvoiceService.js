@@ -27,6 +27,7 @@ class InvoiceService {
         status,
         customer_details,
         items,
+        invoice_date,
       } = invoiceData;
 
       // Validate required fields
@@ -34,7 +35,7 @@ class InvoiceService {
         throw new Error("Missing required fields");
       }
 
-      console.log(customer_details);
+      console.log("Invoice Data:", invoiceData);
       const data = await JSON.parse(customer_details);
       console.log(data);
       // Find or create company if not exists
@@ -61,7 +62,7 @@ class InvoiceService {
           cgst_amount,
           grand_total,
           status: status || "pending",
-          invoice_date: new Date(),
+          invoice_date: invoice_date,
           due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
           customer_name: data.name,
           remaining_amount: grand_total,
@@ -240,7 +241,10 @@ class InvoiceService {
             as: "invoiceItems",
           },
         ],
-        order: [["createdAt", "DESC"]],
+        order: [
+          ["invoice_date", "DESC"], // Primary sort by invoice_date
+          ["createdAt", "DESC"], // Secondary sort by createdAt
+        ], // Secondary sort by createdAt],
         limit: limit,
         offset: (page - 1) * limit,
       });

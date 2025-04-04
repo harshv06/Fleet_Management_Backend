@@ -13,7 +13,7 @@ class BankAccountBalanceService {
   static async updateAccountBalance(transactionData) {
     const transaction = await sequelize.transaction();
     console.log("Transaction Data:", transactionData);
-  
+
     try {
       // Validate core required fields
       const requiredFields = ["bank_account_id", "amount", "transaction_type"];
@@ -22,42 +22,43 @@ class BankAccountBalanceService {
           throw new Error(`${field} is required for balance update`);
         }
       });
-  
+
       // Find the bank account
       const bankAccount = await this.findBankAccount(
         transactionData.bank_account_id,
         transaction
       );
-  
+
       // Calculate new balance
       const newBalance = this.calculateNewBalance(
         bankAccount.current_balance,
         transactionData.amount,
         transactionData.transaction_type
       );
-  
+
       // Validate balance
       this.validateBalance(newBalance);
-  
+
       // Update bank account balance
       await this.updateBankAccountBalance(bankAccount, newBalance, transaction);
-  
+
       // Create bank transaction record
       const bankTransaction = await this.createBankTransaction(
         bankAccount,
         {
           ...transactionData,
-          description: transactionData.description || 
-                       (transactionData.category ? 
-                        `${transactionData.category} Transaction` : 
-                        "Transaction"),
+          description:
+            transactionData.description ||
+            (transactionData.category
+              ? `${transactionData.category} Transaction`
+              : "Transaction"),
         },
         newBalance,
         transaction
       );
-  
+
       await transaction.commit();
-  
+
       return {
         bankAccount,
         bankTransaction,
@@ -72,36 +73,37 @@ class BankAccountBalanceService {
   static async updateAccountBalanceWithComparison(balanceUpdateData) {
     const transaction = await sequelize.transaction();
     console.log("Balance Update Data:", balanceUpdateData);
-  
+
     try {
       // 1. Comprehensive Validation
       this.validateBalanceUpdateData(balanceUpdateData);
-  
+
       // 2. Find the primary bank account
       const bankAccount = await this.findBankAccount(
         balanceUpdateData.bank_account_id,
         transaction
       );
-  
+
       // 3. Handle potential multi-account scenario
       let originalBankAccount = null;
-      const isCrossAccountTransaction = 
-        balanceUpdateData.original_bank_account_id && 
-        balanceUpdateData.original_bank_account_id !== balanceUpdateData.bank_account_id;
-  
+      const isCrossAccountTransaction =
+        balanceUpdateData.original_bank_account_id &&
+        balanceUpdateData.original_bank_account_id !==
+          balanceUpdateData.bank_account_id;
+
       if (isCrossAccountTransaction) {
         originalBankAccount = await this.findBankAccount(
           balanceUpdateData.original_bank_account_id,
           transaction
         );
       }
-  
+
       // 5. Find or Create Bank Transaction
       let existingBankTransaction = await this.findBankTransactionByReference(
         balanceUpdateData.reference_number,
         transaction
       );
-  
+
       if (!existingBankTransaction) {
         existingBankTransaction = await BankTransactionModel.create(
           {
@@ -114,20 +116,20 @@ class BankAccountBalanceService {
           { transaction }
         );
       }
-  
+
       // 6. Advanced Balance Calculation with Detailed Scenarios
       const calculateBalanceAdjustment = (
-        currentBalance, 
-        originalAmount, 
-        newAmount, 
-        originalType, 
-        newType, 
+        currentBalance,
+        originalAmount,
+        newAmount,
+        originalType,
+        newType,
         isOriginalAccount = false
       ) => {
         const numCurrentBalance = parseFloat(currentBalance);
         const numOriginalAmount = parseFloat(originalAmount);
         const numNewAmount = parseFloat(newAmount);
-  
+
         // Scenario for Original Account (Removing Transaction)
         if (isOriginalAccount) {
           if (originalType === "CREDIT") {
@@ -136,7 +138,7 @@ class BankAccountBalanceService {
             return numCurrentBalance + numOriginalAmount;
           }
         }
-  
+
         // Scenario for New Account (Adding Transaction)
         if (newType === "CREDIT") {
           return numCurrentBalance + numNewAmount;
@@ -144,7 +146,7 @@ class BankAccountBalanceService {
           return numCurrentBalance - numNewAmount;
         }
       };
-  
+
       // Calculate balances for both accounts
       const newBalance = calculateBalanceAdjustment(
         bankAccount.current_balance,
@@ -153,7 +155,7 @@ class BankAccountBalanceService {
         balanceUpdateData.original_transaction_type,
         balanceUpdateData.new_transaction_type
       );
-  
+
       // Calculate original account balance if cross-account
       let originalBankAccountBalance = null;
       if (originalBankAccount) {
@@ -166,16 +168,16 @@ class BankAccountBalanceService {
           true // Indicate this is the original account
         );
       }
-  
+
       // 7. Comprehensive Balance Validation
       this.validateBalance(newBalance);
       if (originalBankAccountBalance !== null) {
         this.validateBalance(originalBankAccountBalance);
       }
-  
+
       // 8. Update Primary Bank Account Balance
       await this.updateBankAccountBalance(bankAccount, newBalance, transaction);
-  
+
       // 9. Update Original Bank Account Balance if Cross-Account
       if (originalBankAccount && originalBankAccountBalance !== null) {
         await this.updateBankAccountBalance(
@@ -184,7 +186,7 @@ class BankAccountBalanceService {
           transaction
         );
       }
-  
+
       // 10. Update Bank Transaction Details
       const updatedBankTransaction = await existingBankTransaction.update(
         {
@@ -193,16 +195,16 @@ class BankAccountBalanceService {
           transaction_type: balanceUpdateData.new_transaction_type,
           balance_after_transaction: newBalance,
           updated_at: new Date(),
-          notes: isCrossAccountTransaction 
-            ? 'Balance adjusted due to cross-account transaction update' 
-            : 'Balance adjusted due to transaction update'
+          notes: isCrossAccountTransaction
+            ? "Balance adjusted due to cross-account transaction update"
+            : "Balance adjusted due to transaction update",
         },
         { transaction }
       );
-  
+
       // 12. Commit Transaction
       await transaction.commit();
-  
+
       // 13. Return Comprehensive Result
       return {
         bankAccount,
@@ -212,17 +214,16 @@ class BankAccountBalanceService {
         originalBankAccountBalance,
         adjustmentTimestamp: new Date(),
       };
-  
     } catch (error) {
       // 14. Robust Error Handling
       await transaction.rollback();
-      
-      console.error('Balance Update Error:', {
+
+      console.error("Balance Update Error:", {
         message: error.message,
         stack: error.stack,
         data: balanceUpdateData,
       });
-  
+
       this.handleError(error);
     }
   }
@@ -814,109 +815,136 @@ class BankAccountBalanceService {
       : numericCurrentBalance + transactionAmount; // Add back DEBIT
   }
 
-  static async revertTransactionBalance(balanceRevertData) {
-    const transaction = await sequelize.transaction();
-  
+  static calculateRevertedBalanceForDeletion(
+    currentBalance,
+    transactionAmount,
+    transactionType
+  ) {
+    const numCurrentBalance = parseFloat(currentBalance);
+    const numTransactionAmount = parseFloat(transactionAmount);
+
+    // When deleting a CREDIT transaction, subtract the amount from current balance
+    if (transactionType === "CREDIT") {
+      return numCurrentBalance - numTransactionAmount;
+    }
+
+    // When deleting a DEBIT transaction, add the amount back to current balance
+    return numCurrentBalance + numTransactionAmount;
+  }
+
+  static async revertTransactionBalance(
+    balanceRevertData,
+    existingTransaction = null
+  ) {
+    const transaction = existingTransaction || (await sequelize.transaction());
+    const shouldCommit = !existingTransaction; // Only commit if we created the transaction
+
     try {
-      // 1. Validate input data
+      // Validate input data
       this.validateBalanceRevertData(balanceRevertData);
-  
-      // 2. Find the bank account
+
+      // Find the bank account
       const bankAccount = await this.findBankAccount(
         balanceRevertData.bank_account_id,
         transaction
       );
-  
-      // 3. Find the bank transaction (if exists)
-      const existingBankTransaction = await this.findBankTransactionByReference(
+
+      // Find the bank transaction
+      const bankTransaction = await this.findBankTransactionByReference(
         balanceRevertData.reference_number,
         transaction
       );
-  
-      // 4. Calculate reverted balance
+
+      if (!bankTransaction) {
+        throw new Error("Bank transaction not found");
+      }
+
+      // Calculate reverted balance
       const revertedBalance = this.calculateRevertedBalanceForDeletion(
         bankAccount.current_balance,
         balanceRevertData.amount,
         balanceRevertData.transaction_type
       );
-  
-      // 5. Validate the reverted balance
+
+      // Validate the reverted balance
       this.validateBalance(revertedBalance);
-  
-      // 6. Update bank account balance
-      await this.updateBankAccountBalance(bankAccount, revertedBalance, transaction);
-  
-      // 7. Delete the bank transaction if it exists
-      if (existingBankTransaction) {
-        await existingBankTransaction.destroy({ transaction });
+
+      // Update bank account balance
+      await this.updateBankAccountBalance(
+        bankAccount,
+        revertedBalance,
+        transaction
+      );
+
+      // Delete the bank transaction
+      await bankTransaction.destroy({ transaction });
+
+      // Only commit if we created the transaction
+      if (shouldCommit) {
+        await transaction.commit();
       }
-  
-      // 8. Commit the transaction
-      await transaction.commit();
-  
+
       return {
         bankAccount,
         newBalance: revertedBalance,
-        deletedTransaction: existingBankTransaction,
+        deletedTransaction: bankTransaction,
       };
     } catch (error) {
-      // 9. Rollback the transaction in case of error
-      await transaction.rollback();
-      
-      console.error('Transaction Balance Revert Error:', {
+      // Only rollback if we created the transaction
+      if (shouldCommit) {
+        await transaction.rollback();
+      }
+
+      console.error("Transaction Balance Revert Error:", {
         message: error.message,
         stack: error.stack,
         data: balanceRevertData,
       });
-  
-      this.handleError(error);
+
+      throw error;
     }
   }
-  
+
   static calculateRevertedBalanceForDeletion(
-    currentBalance, 
-    transactionAmount, 
+    currentBalance,
+    transactionAmount,
     transactionType
   ) {
     const numCurrentBalance = parseFloat(currentBalance);
     const numTransactionAmount = parseFloat(transactionAmount);
-  
+
     // For CREDIT transactions, subtract the amount
     if (transactionType === "CREDIT") {
       return numCurrentBalance - numTransactionAmount;
     }
-  
+
     // For DEBIT transactions, add the amount back
     return numCurrentBalance + numTransactionAmount;
   }
-  
+
   static validateBalanceRevertData(data) {
     const requiredFields = [
-      "bank_account_id",
-      "amount",
-      "transaction_type",
-      "reference_number",
+        "bank_account_id",
+        "amount",
+        "transaction_type",
+        "reference_number"
     ];
-  
-    // Check for missing required fields
-    requiredFields.forEach((field) => {
-      if (!data[field]) {
-        throw new Error(`${field} is required for balance reversion`);
-      }
+
+    requiredFields.forEach(field => {
+        if (!data[field]) {
+            throw new Error(`${field} is required for balance reversion`);
+        }
     });
-  
-    // Validate amount
+
     const amount = parseFloat(data.amount);
-    if (isNaN(amount) || amount < 0) {
-      throw new Error("Invalid amount");
+    if (isNaN(amount) || amount <= 0) {
+        throw new Error("Invalid amount");
     }
-  
-    // Validate transaction type
-    const validTransactionTypes = ["CREDIT", "DEBIT"];
-    if (!validTransactionTypes.includes(data.transaction_type)) {
-      throw new Error("Invalid transaction type");
+
+    if (!["CREDIT", "DEBIT"].includes(data.transaction_type)) {
+        throw new Error("Invalid transaction type");
     }
-  }
+}
 }
 
 module.exports = BankAccountBalanceService;
