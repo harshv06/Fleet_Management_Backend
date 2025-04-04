@@ -24,10 +24,24 @@ class PurchaseInvoiceController {
   }
   async getAllPurchaseInvoices(req, res) {
     try {
-      const invoices = await PurchaseInvoiceService.getAllPurchaseInvoices();
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const status = req.query.status || null;
+  
+      const { invoices, totalItems, totalPages } = 
+        await PurchaseInvoiceService.getAllPurchaseInvoices(page, limit, status);
+  
       res.json({
         status: "success",
-        data: invoices,
+        data: {
+          invoices,
+          pagination: {
+            currentPage: page,
+            totalPages,
+            totalItems,
+            limit
+          }
+        }
       });
     } catch (error) {
       console.error("Get purchase invoices error:", error);

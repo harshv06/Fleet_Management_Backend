@@ -21,7 +21,6 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: true,
       },
       company_id: {
-        // If you have multiple companies
         type: DataTypes.UUID,
         allowNull: true,
       },
@@ -30,6 +29,33 @@ module.exports = (sequelize, DataTypes) => {
       tableName: "categories",
       timestamps: true,
       underscored: true,
+      hooks: {
+        afterSync: async () => {
+          try {
+            const defaultCategories = [
+              {
+                name: "DIRECT",
+                description: "Direct category",
+                is_active: true,
+              },
+              {
+                name: "PAYMENTS",
+                description: "Payments category",
+                is_active: true,
+              },
+            ];
+
+            for (const category of defaultCategories) {
+              await Category.findOrCreate({
+                where: { name: category.name },
+                defaults: category,
+              });
+            }
+          } catch (error) {
+            console.error("Error creating default categories:", error);
+          }
+        },
+      },
     }
   );
 

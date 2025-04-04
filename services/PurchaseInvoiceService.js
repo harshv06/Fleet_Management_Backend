@@ -30,6 +30,7 @@ class PurchaseInvoiceService {
           invoice_number: data.invoice_number,
           invoice_date: data.invoice_date,
           vendor_name: data.vendor_name,
+          vendor_gst: data.vendor_gst,
           vendor_id: vendor?.company_id,
           subtotal: data.subtotal,
           total_gst: data.total_gst,
@@ -54,9 +55,14 @@ class PurchaseInvoiceService {
       throw error;
     }
   }
-  async getAllPurchaseInvoices() {
+  async getAllPurchaseInvoices(page, limit, status) {
     try {
-      const invoices = await PurchaseInvoice.findAll({
+      const offset = (page - 1) * limit;
+      
+      const whereClause = status ? { status: status } : {};
+  
+      const { count, rows } = await PurchaseInvoice.findAndCountAll({
+        where: whereClause,
         include: [
           {
             model: PurchaseInvoiceItem,
@@ -64,9 +70,15 @@ class PurchaseInvoiceService {
           },
         ],
         order: [["created_at", "DESC"]],
+        offset,
+        limit,
       });
-      // console.log(invoices);
-      return invoices;
+  
+      return {
+        invoices: rows,
+        totalItems: count,
+        totalPages: Math.ceil(count / limit)
+      };
     } catch (error) {
       console.error("Error fetching purchase invoices:", error);
       throw error;

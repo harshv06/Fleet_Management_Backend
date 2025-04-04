@@ -18,6 +18,7 @@ class InvoiceService {
       // Destructure invoice data
       const {
         invoice_number,
+        customer_gst,
         company_id,
         total_amount,
         sgst_amount,
@@ -55,6 +56,7 @@ class InvoiceService {
           invoice_number,
           company_id: company_id || company.company_id,
           total_amount,
+          customer_gst,
           sgst_amount,
           cgst_amount,
           grand_total,

@@ -39,9 +39,51 @@ module.exports = (sequelize, DataTypes) => {
           fields: ["name", "category_id"],
         },
       ],
+      hooks: {
+        afterSync: async () => {
+          try {
+            // First, get the category IDs
+            const Category = sequelize.models.Category;
+            const directCategory = await Category.findOne({
+              where: { name: 'DIRECT' }
+            });
+            const paymentsCategory = await Category.findOne({
+              where: { name: 'PAYMENTS' }
+            });
+
+            if (directCategory && paymentsCategory) {
+              const defaultSubGroups = [
+                {
+                  name: 'PURCHASE',
+                  description: 'Purchase sub-group',
+                  category_id: directCategory.category_id,
+                  is_active: true
+                },
+                {
+                  name: 'INVOICE',
+                  description: 'Invoice sub-group',
+                  category_id: paymentsCategory.category_id,
+                  is_active: true
+                }
+              ];
+
+              for (const subGroup of defaultSubGroups) {
+                await SubGroup.findOrCreate({
+                  where: {
+                    name: subGroup.name,
+                    category_id: subGroup.category_id
+                  },
+                  defaults: subGroup
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error creating default sub-groups:', error);
+          }
+        }
+      }
     }
   );
-
 
   return SubGroup;
 };

@@ -108,6 +108,30 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
+  // In Invoice model
+  Invoice.getGSTReport = async function (startDate, endDate) {
+    return this.findAll({
+      where: {
+        invoice_date: {
+          [Op.between]: [startDate, endDate],
+        },
+        customer_gst: {
+          [Op.not]: null,
+        },
+      },
+      attributes: [
+        "invoice_id",
+        "invoice_number",
+        "customer_name",
+        "customer_gst",
+        "total_amount",
+        "sgst_amount",
+        "cgst_amount",
+      ],
+    });
+  };
+
+  // Similar method for PurchaseInvoice
   Invoice.findOneByIdentifier = async function (identifier, options = {}) {
     try {
       // Validate and clean the identifier
