@@ -1,11 +1,11 @@
 const { Sequelize,Op } = require("sequelize");
 // const { Op } = require("sequelize");
 
-// const sequelize = new Sequelize("BILL_MANAGEMENT", "Harsh", "Harshv0624", {
+const sequelize = new Sequelize("BILL_MANAGEMENT", "Harsh", "Harshv0624", {
 
-const sequelize = new Sequelize("bill_management", "harsh", "1234", {
-  host: "82.112.237.241",
-  // host: "localhost",
+// const sequelize = new Sequelize("bill_management", "harsh", "1234", {
+  // host: "82.112.237.241",
+  host: "localhost",
   dialect: "postgres",
   logging: (sql, timing) => {
     if (timing > 1000) {
