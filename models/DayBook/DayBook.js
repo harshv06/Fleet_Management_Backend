@@ -118,6 +118,17 @@ module.exports = (sequelize, DataTypes) => {
       party_type: {
         type: DataTypes.STRING,
       },
+      tds_applicable: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      tds_amount: {
+        type: DataTypes.DECIMAL(15, 2),
+      },
+      tds_percentage: {
+        type: DataTypes.DECIMAL(5, 2),
+      },
+      
     },
     {
       tableName: "daybook",

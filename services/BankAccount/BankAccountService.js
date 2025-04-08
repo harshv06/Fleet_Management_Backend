@@ -159,6 +159,14 @@ class BankAccountService {
       }
     );
   }
+
+  static async getBankAllAccountBalance() {AccountBalance
+    return BankAccountModel.findAll({
+      attributes: ["account_id", "bank_name", "account_number", "current_balance"],
+      where: { is_active: true },
+    });
+  }
+  // Adjust balance for a specific bank account
 }
 
 module.exports = BankAccountService;

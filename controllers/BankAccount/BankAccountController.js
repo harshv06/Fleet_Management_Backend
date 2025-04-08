@@ -146,6 +146,41 @@ class BankAccountController {
       });
     }
   }
+
+  async getBankAccountStatement(req, res) {
+    try {
+      const { accountId } = req.params;
+      const filters = req.query;
+      const statement = await BankAccountBalanceService.getBankAccountStatement(
+        accountId,
+        filters
+      );
+      res.status(200).json({
+        status: "success",
+        data: statement,
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+  }
+
+  async getAllBankBalances(req, res) {
+    try {
+      const bankBalances = await BankAccountService.getBankAllAccountBalance();
+      res.status(200).json({
+        status: "success",
+        data: bankBalances,
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+  }
 }
 
 module.exports = new BankAccountController();

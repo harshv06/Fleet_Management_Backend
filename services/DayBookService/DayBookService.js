@@ -8,15 +8,16 @@ const {
 const { Op } = require("sequelize");
 const XLSX = require("xlsx");
 const moment = require("moment");
+const BankAccountService = require("../BankAccount/BankAccountService");
 
 class DayBookService {
   static async addTransaction(transactionData) {
     const transaction = await sequelize.transaction();
     try {
-      console.log("Incoming transaction data:", transactionData);
+      // console.log("Incoming transaction data:", transactionData);
 
       const { transaction_date } = transactionData;
-      console.log("Incoming transaction data:", transactionData);
+      // console.log("Incoming transaction data:", transactionData);
       const processedDate = moment
         .utc(transactionData.transaction_date)
         .toDate();
@@ -216,7 +217,7 @@ class DayBookService {
 
       // Calculate pagination metadata
       const totalPages = Math.ceil(count / limit);
-      console.log("Total Pages:", transactions);
+      // console.log("Total Pages:", transactions);
       return {
         transactions,
         pagination: {
@@ -260,14 +261,26 @@ class DayBookService {
 
   static async getMonthlyReport(year, month) {
     try {
-      const [monthlyBalance, transactions] = await Promise.all([
+      const [monthlyBalance, transactions, bankAccounts] = await Promise.all([
         this.getMonthlyBalance(year, month),
         this.getTransactions({
           startDate: new Date(year, month - 1, 1),
           endDate: new Date(year, month, 0, 23, 59, 59),
         }),
+        BankAccountService.getAllBankAccounts(), // Add this to fetch all bank accounts
       ]);
 
+      const totalCurrentBalance = bankAccounts.reduce((total, account) => {
+        // Remove leading zeros and parse
+        const balance =
+          parseFloat(
+            typeof account.current_balance === "string"
+              ? account.current_balance.replace(/^0+/, "")
+              : account.current_balance
+          ) || 0;
+        return total + balance;
+      }, 0);
+      // console.log("Total Current Balance:", totalCurrentBalance);
       return {
         monthlyBalance: monthlyBalance || {
           opening_balance: 0,
@@ -276,6 +289,8 @@ class DayBookService {
           total_debits: 0,
         },
         transactions,
+        bankAccounts, // Include bank accounts in the return
+        totalCurrentBalance, // Add total current balance
       };
     } catch (error) {
       throw error;

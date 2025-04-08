@@ -414,6 +414,16 @@ Payment.belongsTo(Invoice, {
   as: "invoice",
 });
 
+BankAccountModel.hasMany(BankTransactionModel, {
+  foreignKey: "account_id",
+  as: "transactions",
+});
+
+BankTransactionModel.belongsTo(BankAccountModel, {
+  foreignKey: "account_id",
+  as: "account",
+});
+
 // Export models with associations
 module.exports = {
   sequelize,
