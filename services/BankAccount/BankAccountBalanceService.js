@@ -70,6 +70,38 @@ class BankAccountBalanceService {
     }
   }
 
+  static async getBankAccountStatement(accountId, filters = {}) {
+    try {
+      const { startDate, endDate } = filters;
+      const where = { account_id: accountId };
+
+      if (startDate && endDate) {
+        where.transaction_date = {
+          [Op.between]: [new Date(startDate), new Date(endDate)],
+        };
+      }
+
+      const bankTransactions = await BankTransactionModel.findAll({
+        where,
+        order: [["transaction_date", "ASC"]],
+        include: [
+          {
+            model: BankAccountModel,
+            as: "account",
+            attributes: ["account_name"],
+          },
+        ],
+      });
+      const summary = this.calculateStatementSummary(bankTransactions);
+      return {
+        bankTransactions,
+        summary,
+      };
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
   static async updateAccountBalanceWithComparison(balanceUpdateData) {
     const transaction = await sequelize.transaction();
     console.log("Balance Update Data:", balanceUpdateData);
@@ -109,13 +141,16 @@ class BankAccountBalanceService {
           {
             account_id: balanceUpdateData.bank_account_id,
             transaction_date: new Date(),
-            amount: parseFloat(balanceUpdateData.original_amount),
+            amount: parseFloat(balanceUpdateData.new_amount),
+            description: balanceUpdateData.description || "Transaction",
             transaction_type: balanceUpdateData.original_transaction_type,
             reference_number: balanceUpdateData.reference_number,
           },
           { transaction }
         );
       }
+
+      console.log("Existing Data: ", existingBankTransaction);
 
       // 6. Advanced Balance Calculation with Detailed Scenarios
       const calculateBalanceAdjustment = (
@@ -150,7 +185,7 @@ class BankAccountBalanceService {
       // Calculate balances for both accounts
       const newBalance = calculateBalanceAdjustment(
         bankAccount.current_balance,
-        balanceUpdateData.original_amount,
+        balanceUpdateData.new_amount,
         balanceUpdateData.new_amount,
         balanceUpdateData.original_transaction_type,
         balanceUpdateData.new_transaction_type
@@ -161,7 +196,7 @@ class BankAccountBalanceService {
       if (originalBankAccount) {
         originalBankAccountBalance = calculateBalanceAdjustment(
           originalBankAccount.current_balance,
-          balanceUpdateData.original_amount,
+          balanceUpdateData.new_amount,
           balanceUpdateData.new_amount,
           balanceUpdateData.original_transaction_type,
           balanceUpdateData.new_transaction_type,
@@ -202,6 +237,7 @@ class BankAccountBalanceService {
         { transaction }
       );
 
+      console.log("Updated Bank Transaction: ", updatedBankTransaction);
       // 12. Commit Transaction
       await transaction.commit();
 
@@ -231,7 +267,7 @@ class BankAccountBalanceService {
   static validateBalanceUpdateData(data) {
     const requiredFields = [
       "bank_account_id",
-      "original_amount",
+      "new_amount",
       "original_transaction_type",
       "new_amount",
       "new_transaction_type",
@@ -246,7 +282,7 @@ class BankAccountBalanceService {
     });
 
     // Validate amounts
-    const originalAmount = parseFloat(data.original_amount);
+    const originalAmount = parseFloat(data.new_amount);
     const newAmount = parseFloat(data.new_amount);
 
     if (isNaN(originalAmount) || isNaN(newAmount)) {
@@ -706,12 +742,12 @@ class BankAccountBalanceService {
       }
 
       // Fetch transactions
-      const transactions = await BankTransaction.findAll({
+      const transactions = await BankTransactionModel.findAll({
         where: whereConditions,
-        order: [["transaction_date", "ASC"]],
+        order: [["transaction_date", "DESC"]],
         include: [
           {
-            model: BankAccount,
+            model: BankAccountModel,
             as: "account",
           },
         ],
@@ -924,27 +960,27 @@ class BankAccountBalanceService {
 
   static validateBalanceRevertData(data) {
     const requiredFields = [
-        "bank_account_id",
-        "amount",
-        "transaction_type",
-        "reference_number"
+      "bank_account_id",
+      "amount",
+      "transaction_type",
+      "reference_number",
     ];
 
-    requiredFields.forEach(field => {
-        if (!data[field]) {
-            throw new Error(`${field} is required for balance reversion`);
-        }
+    requiredFields.forEach((field) => {
+      if (!data[field]) {
+        throw new Error(`${field} is required for balance reversion`);
+      }
     });
 
     const amount = parseFloat(data.amount);
     if (isNaN(amount) || amount <= 0) {
-        throw new Error("Invalid amount");
+      throw new Error("Invalid amount");
     }
 
     if (!["CREDIT", "DEBIT"].includes(data.transaction_type)) {
-        throw new Error("Invalid transaction type");
+      throw new Error("Invalid transaction type");
     }
-}
+  }
 }
 
 module.exports = BankAccountBalanceService;

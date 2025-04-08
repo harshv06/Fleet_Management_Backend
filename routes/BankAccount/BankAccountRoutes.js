@@ -9,6 +9,8 @@ const router = express.Router();
 
 router.get("/accounts/:accountId", BankAccountController.getBankAccountDetails);
 router.get("/bank/accounts", BankAccountController.getAllBankAccounts);
+router.get("/bank/account/:accountId/statement", BankAccountController.getBankAccountStatement);
+router.get("/bank/AllBankBalances", BankAccountController.getAllBankBalances);
 
 router.post("/bank/accounts", BankAccountController.createBankAccount);
 router.post("/transactions", BankAccountController.recordBankTransaction);
