@@ -29,6 +29,7 @@ const CarSalaryRecordModel = require("./SalaryCalculations/CarSalaryRecord");
 const BankAccount = require("./BankAccount/BankAccount");
 const BankTransaction = require("./BankAccount/BankTransaction");
 const CompanyProfileModel = require("./CompanyProfile/CompanyProfile");
+const TDSRecord = require("./TDS");
 
 // Initialize models
 const Company = CompanyModel(sequelize, DataTypes);
@@ -60,6 +61,7 @@ const CarSalaryRecord = CarSalaryRecordModel(sequelize, DataTypes);
 const BankAccountModel = BankAccount(sequelize, DataTypes);
 const BankTransactionModel = BankTransaction(sequelize, DataTypes);
 const CompanyProfile = CompanyProfileModel(sequelize, DataTypes);
+const TDS = TDSRecord(sequelize, DataTypes);
 
 // Comprehensive Associations
 
@@ -424,6 +426,16 @@ BankTransactionModel.belongsTo(BankAccountModel, {
   as: "account",
 });
 
+TDS.belongsTo(Company, {
+  foreignKey: "company_id",
+  as: "company",
+});
+
+Company.hasMany(TDS, {
+  foreignKey: "company_id",
+  as: "tdsRecords",
+});
+
 // Export models with associations
 module.exports = {
   sequelize,
@@ -455,4 +467,5 @@ module.exports = {
   BankTransactionModel,
   SubGroups,
   CompanyProfile,
+  TDS,
 };

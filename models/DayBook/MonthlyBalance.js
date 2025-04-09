@@ -43,6 +43,11 @@ module.exports = (sequelize, DataTypes) => {
       closed_at: {
         type: DataTypes.DATE,
       },
+      total_current_balance: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+      },
     },
     {
       tableName: "monthly_balances",

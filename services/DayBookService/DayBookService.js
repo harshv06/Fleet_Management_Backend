@@ -4,6 +4,7 @@ const {
   MonthlyBalance,
   sequelize,
   OpeningBalance,
+  TDS,
 } = require("../../models/index");
 const { Op } = require("sequelize");
 const XLSX = require("xlsx");
@@ -71,12 +72,28 @@ class DayBookService {
         transaction,
       });
 
-      let previousBalance = previousTransaction
-        ? parseFloat(previousTransaction.balance)
-        : 0;
+      const openingBalanceRecord = await OpeningBalance.findOne({
+        where: {
+          set_date: {
+            [Op.lte]: new Date(transactionData.transaction_date),
+          },
+          is_monthly_set: true,
+        },
+        order: [["set_date", "DESC"]],
+        transaction,
+      });
+
+      let previousBalance = 0;
+      if (openingBalanceRecord) {
+        previousBalance = parseFloat(openingBalanceRecord.amount);
+      }
+
+      if (previousTransaction) {
+        previousBalance = parseFloat(previousTransaction.balance);
+      }
 
       // Calculate new balance including GST if applicable
-      const amount = parseFloat(transactionData.amount) + gstAmount;
+      const amount = parseFloat(transactionData.amount);
       const newBalance =
         transactionData.transaction_type === "CREDIT"
           ? previousBalance + amount
@@ -212,6 +229,11 @@ class DayBookService {
           "company_id",
           "car_id",
           "bank_account_id",
+          "tds_applicable",
+          "tds_amount",
+          "tds_rate",
+          "tds_section",
+          "tds_percentage",
         ],
       });
 
@@ -297,8 +319,156 @@ class DayBookService {
     }
   }
 
+  static async handleTDSRecordForUpdate(
+    transaction,
+    updateData,
+    sequelizeTransaction
+  ) {
+    try {
+      // Determine financial year
+      const currentDate = new Date(transaction.transaction_date);
+      const financialYear = this.getFinancialYear(currentDate);
+
+      // Calculate TDS amount
+      const tdsAmount =
+        updateData.tds_amount ||
+        (parseFloat(transaction.amount) *
+          parseFloat(updateData.tds_percentage || 0)) /
+          100;
+
+      // Check if TDS record already exists for this transaction
+      let existingTDSRecord = await TDS.findOne({
+        where: {
+          transaction_id: transaction.transaction_id,
+        },
+        transaction: sequelizeTransaction,
+      });
+
+      const tdsRecordData = {
+        company_id: transaction.company_id,
+        transaction_id: transaction.transaction_id,
+        financial_year: financialYear,
+        tds_amount: tdsAmount,
+        tds_rate: parseFloat(updateData.tds_percentage || 0),
+        tds_section: updateData.tds_section || null,
+        invoice_number: transaction.reference_number,
+        invoice_date: currentDate,
+        payment_date: currentDate,
+        payment_status: "COLLECTED",
+        remarks: updateData.tds_remarks || null,
+      };
+
+      if (existingTDSRecord) {
+        // Update existing TDS record
+        await existingTDSRecord.update(tdsRecordData, {
+          transaction: sequelizeTransaction,
+        });
+      } else {
+        // Create new TDS record
+        await TDS.create(tdsRecordData, {
+          transaction: sequelizeTransaction,
+        });
+      }
+    } catch (error) {
+      console.error("Error handling TDS record:", error);
+      throw error;
+    }
+  }
+
+  static getFinancialYear(date) {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+
+    // Financial year starts from April
+    if (month >= 3) {
+      return `${year}-${year + 1}`;
+    } else {
+      return `${year - 1}-${year}`;
+    }
+  }
+
+  // Method to deposit TDS
+  static async depositTDS(tdsRecordId, depositDetails) {
+    const transaction = await sequelize.transaction();
+    try {
+      const tdsRecord = await TDSRecord.findByPk(tdsRecordId, { transaction });
+
+      if (!tdsRecord) {
+        throw new Error("TDS Record not found");
+      }
+
+      await tdsRecord.update(
+        {
+          payment_status: "DEPOSITED",
+          deposited_date: depositDetails.deposited_date || new Date(),
+          remarks: depositDetails.remarks || tdsRecord.remarks,
+        },
+        { transaction }
+      );
+
+      await transaction.commit();
+      return tdsRecord;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  // Method to get TDS records
+  static async getTDSRecords(filters = {}) {
+    try {
+      const {
+        company_id,
+        financial_year,
+        payment_status,
+        startDate,
+        endDate,
+        page = 1,
+        limit = 20,
+      } = filters;
+
+      const whereConditions = {};
+
+      if (company_id) whereConditions.company_id = company_id;
+      if (financial_year) whereConditions.financial_year = financial_year;
+      if (payment_status) whereConditions.payment_status = payment_status;
+
+      if (startDate && endDate) {
+        whereConditions.payment_date = {
+          [Op.between]: [new Date(startDate), new Date(endDate)],
+        };
+      }
+
+      const { count, rows } = await TDSRecord.findAndCountAll({
+        where: whereConditions,
+        include: [
+          {
+            model: Company,
+            as: "company",
+            attributes: ["company_name"],
+          },
+        ],
+        order: [["payment_date", "DESC"]],
+        limit,
+        offset: (page - 1) * limit,
+      });
+
+      return {
+        tdsRecords: rows,
+        pagination: {
+          total: count,
+          page,
+          pageSize: limit,
+          totalPages: Math.ceil(count / limit),
+        },
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
   static async updateTransaction(identifier, updateData) {
-    console.log(identifier);
+    console.log("update Data:", updateData);
     const transaction = await sequelize.transaction();
     try {
       // Find existing transaction using either transaction_id or reference_number
@@ -361,11 +531,10 @@ class DayBookService {
         )
       );
 
-      // Get the previous transaction's balance
       const previousTransaction = await DayBook.findOne({
         where: {
           transaction_date: {
-            [Op.lt]: startDate,
+            [Op.lt]: existingTransaction.transaction_date,
           },
         },
         order: [
@@ -375,27 +544,48 @@ class DayBookService {
         transaction,
       });
 
-      let previousBalance = previousTransaction
-        ? parseFloat(previousTransaction.balance)
-        : 0;
+      // Get the opening balance record
+      const openingBalanceRecord = await OpeningBalance.findOne({
+        order: [["set_date", "ASC"]],
+        transaction,
+      });
+
+      let previousBalance = 0;
+      if (openingBalanceRecord) {
+        previousBalance = parseFloat(openingBalanceRecord.amount);
+      }
+
+      if (previousTransaction) {
+        previousBalance = parseFloat(previousTransaction.balance);
+      }
 
       // Calculate new balance
-      const amount = formattedUpdateData.amount || existingTransaction.amount;
+      const amount = parseFloat(
+        updateData.amount || existingTransaction.amount
+      );
       const transactionType =
-        formattedUpdateData.transaction_type ||
-        existingTransaction.transaction_type;
+        updateData.transaction_type || existingTransaction.transaction_type;
 
-      // Update the transaction with new balance
-      await existingTransaction.update(
+      const newBalance =
+        transactionType === "CREDIT"
+          ? previousBalance + amount
+          : previousBalance - amount;
+
+      const updatedTransaction = await existingTransaction.update(
         {
           ...formattedUpdateData,
-          balance:
-            transactionType === "CREDIT"
-              ? previousBalance + amount
-              : previousBalance - amount,
+          balance: newBalance,
         },
         { transaction }
       );
+
+      if (updateData.tds_applicable) {
+        await this.handleTDSRecordForUpdate(
+          updatedTransaction,
+          updateData,
+          transaction
+        );
+      }
 
       // Recalculate all subsequent balances
       await this.recalculateBalances(startDate, transaction);
@@ -404,7 +594,7 @@ class DayBookService {
       await this.updateMonthlyBalances(startDate, transaction);
 
       await transaction.commit();
-      return existingTransaction;
+      return updatedTransaction;
     } catch (error) {
       console.error("Error in updateTransaction:", error);
       await transaction.rollback();
@@ -764,6 +954,11 @@ class DayBookService {
     try {
       const openingBalance = await OpeningBalance.findOne({
         order: [["set_date", "DESC"]],
+        where: {
+          set_date: {
+            [Op.lte]: new Date(), // Ensure it's not in the future
+          },
+        },
       });
       return openingBalance;
     } catch (error) {
@@ -793,13 +988,10 @@ class DayBookService {
         transaction,
       });
 
-      // Determine the starting balance
-      let runningBalance = 0;
-      if (openingBalanceRecord) {
-        runningBalance = parseFloat(openingBalanceRecord.amount);
-      }
+      let runningBalance = openingBalanceRecord
+        ? parseFloat(openingBalanceRecord.amount)
+        : 0;
 
-      // If there's a previous transaction after the opening balance, use its balance
       if (previousTransaction) {
         runningBalance = parseFloat(previousTransaction.balance);
       }
@@ -820,19 +1012,15 @@ class DayBookService {
 
       // Recalculate all balances
       for (const trans of transactions) {
-        // Calculate new balance based on transaction type
         runningBalance =
           trans.transaction_type === "CREDIT"
             ? runningBalance + parseFloat(trans.amount)
             : runningBalance - parseFloat(trans.amount);
 
-        // Update the transaction with the new balance
-        await trans.update(
-          {
-            balance: runningBalance,
-          },
-          { transaction }
-        );
+        // Only update if the calculated balance is different
+        if (parseFloat(trans.balance) !== runningBalance) {
+          await trans.update({ balance: runningBalance }, { transaction });
+        }
       }
 
       return runningBalance;
@@ -843,8 +1031,19 @@ class DayBookService {
   }
 
   static async updateMonthlyBalances(startDate, transaction) {
-    console.log("Starting Date:", startDate);
     try {
+      // Fetch total current bank balance
+      const bankAccounts = await BankAccountService.getAllBankAccounts();
+      const totalCurrentBalance = bankAccounts.reduce((total, account) => {
+        const balance =
+          parseFloat(
+            typeof account.current_balance === "string"
+              ? account.current_balance.replace(/^0+/, "")
+              : account.current_balance
+          ) || 0;
+        return total + balance;
+      }, 0);
+
       // Get all affected months
       const months = await DayBook.findAll({
         attributes: [
@@ -879,15 +1078,8 @@ class DayBookService {
         transaction,
       });
 
-      // Get the opening balance record
-      const openingBalanceRecord = await OpeningBalance.findOne({
-        order: [["set_date", "ASC"]],
-        transaction,
-      });
-
-      let previousMonthClosingBalance = openingBalanceRecord
-        ? parseFloat(openingBalanceRecord.amount)
-        : 0;
+      // Use total current balance as the initial opening balance
+      let previousMonthClosingBalance = totalCurrentBalance;
 
       for (const { month } of months) {
         const monthStart = new Date(month);
@@ -912,7 +1104,7 @@ class DayBookService {
         const prevMonthBalance = await MonthlyBalance.findOne({
           where: {
             year: prevYear,
-            month: prevMonth + 1, // Adding 1 because month is 1-indexed in DB
+            month: prevMonth + 1,
           },
           transaction,
         });
@@ -960,7 +1152,7 @@ class DayBookService {
         let monthlyBalance = await MonthlyBalance.findOne({
           where: {
             year: monthStart.getFullYear(),
-            month: monthStart.getMonth() + 1, // Adding 1 because month is 1-indexed in DB
+            month: monthStart.getMonth() + 1,
           },
           transaction,
         });
@@ -968,11 +1160,12 @@ class DayBookService {
         // Prepare data for monthly balance
         const monthBalanceData = {
           year: monthStart.getFullYear(),
-          month: monthStart.getMonth() + 1, // Adding 1 because month is 1-indexed in DB
+          month: monthStart.getMonth() + 1,
           opening_balance: openingBalance,
           closing_balance: monthlyTotals.closingBalance,
           total_credits: monthlyTotals.credits,
           total_debits: monthlyTotals.debits,
+          total_current_balance: totalCurrentBalance, // Add total current balance
         };
 
         // Create or update monthly balance
@@ -985,6 +1178,9 @@ class DayBookService {
         // Update previous month's closing balance for next iteration
         previousMonthClosingBalance = monthlyTotals.closingBalance;
       }
+
+      // Log for debugging
+      console.log("Total Current Bank Balance:", totalCurrentBalance);
     } catch (error) {
       console.error("Error in updateMonthlyBalances:", error);
       throw error;
@@ -1093,6 +1289,120 @@ class DayBookService {
     } catch (error) {
       console.error("Error exporting to Excel:", error);
       throw error;
+    }
+  }
+
+  static async setMonthlyOpeningBalance(year, month) {
+    const transaction = await sequelize.transaction();
+    try {
+      // Create a date for the first day of the specified month
+      const startDate = new Date(year, month - 1, 1);
+      const monthYearKey = `${year}-${month}`;
+
+      // Check if opening balance is already set for this month
+      const existingMonthlyOpeningBalance = await OpeningBalance.findOne({
+        where: {
+          month_year: monthYearKey,
+          is_monthly_set: true,
+        },
+        transaction,
+      });
+
+      // If already set, return existing balance
+      if (existingMonthlyOpeningBalance) {
+        console.log(`Opening balance already set for ${monthYearKey}`);
+        return {
+          totalCurrentBalance: existingMonthlyOpeningBalance.amount,
+          alreadySet: true,
+        };
+      }
+
+      // Fetch all bank accounts and calculate total balance
+      const bankAccounts = await BankAccountService.getAllBankAccounts();
+      const totalCurrentBalance = bankAccounts.reduce((total, account) => {
+        const balance =
+          parseFloat(
+            typeof account.current_balance === "string"
+              ? account.current_balance.replace(/^0+/, "")
+              : account.current_balance
+          ) || 0;
+        return total + balance;
+      }, 0);
+
+      // Create or update opening balance
+      const [openingBalance, created] = await OpeningBalance.findOrCreate({
+        where: {
+          month_year: monthYearKey,
+        },
+        defaults: {
+          amount: totalCurrentBalance,
+          set_date: startDate,
+          is_monthly_set: true,
+          month_year: monthYearKey,
+          notes: `Monthly opening balance for ${monthYearKey}`,
+        },
+        transaction,
+      });
+
+      // If not created (already exists), update
+      if (!created) {
+        await openingBalance.update(
+          {
+            amount: totalCurrentBalance,
+            is_monthly_set: true,
+            notes: `Monthly opening balance for ${monthYearKey}`,
+          },
+          { transaction }
+        );
+      }
+
+      // Update monthly balance record
+      const [monthlyBalance] = await MonthlyBalance.findOrCreate({
+        where: {
+          year: year,
+          month: month,
+        },
+        defaults: {
+          opening_balance: totalCurrentBalance,
+          total_current_balance: totalCurrentBalance,
+        },
+        transaction,
+      });
+
+      await monthlyBalance.update(
+        {
+          opening_balance: totalCurrentBalance,
+          total_current_balance: totalCurrentBalance,
+        },
+        { transaction }
+      );
+
+      await transaction.commit();
+
+      return {
+        totalCurrentBalance,
+        created: created,
+      };
+    } catch (error) {
+      await transaction.rollback();
+      console.error("Error setting monthly opening balance:", error);
+      throw error;
+    }
+  }
+
+  // Cron job or scheduled method to run at the start of each month
+  static async runMonthlyOpeningBalanceUpdate() {
+    const currentDate = new Date();
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth() + 1; // JavaScript months are 0-indexed
+
+    try {
+      const result = await this.setMonthlyOpeningBalance(year, month);
+      console.log(
+        `Monthly opening balance set: ${result.totalCurrentBalance} on ${result.date}`
+      );
+    } catch (error) {
+      console.error("Failed to set monthly opening balance:", error);
     }
   }
 }

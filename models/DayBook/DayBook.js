@@ -128,6 +128,14 @@ module.exports = (sequelize, DataTypes) => {
       tds_percentage: {
         type: DataTypes.DECIMAL(5, 2),
       },
+      tds_rate: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: true
+      },
+      tds_section: {
+        type: DataTypes.STRING,
+        allowNull: true
+      }
       
     },
     {
