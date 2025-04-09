@@ -20,8 +20,24 @@ const SalaryCalculation = require("./routes/SalaryCalculations/SalaryCalculation
 const financialReportRoutes = require("./routes/FinancialReport/FinancialReportsRoutes");
 const DatabaseBackupRoutes = require("./routes/DatabaseBackup");
 const GSTReportRoutes = require("./routes/GST/Gst_Routes");
-const CompanyRoutes=require("./routes/CompanyProfile/CompanyProfileRoutes")
+const CompanyRoutes = require("./routes/CompanyProfile/CompanyProfileRoutes");
+const cron = require("node-cron");
+const DayBookService = require("./services/DayBookService/DayBookService");
+const TDSRoutes = require("./routes/TDS/TDSRoutes");
 // const { Sequelize, DataTypes } = require('sequelize');
+
+cron.schedule("0 0 1 * *", async () => {
+  const currentDate = new Date();
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth() + 1;
+
+  try {
+    const result = await DayBookService.setMonthlyOpeningBalance(year, month);
+    console.log(`Monthly opening balance set: ${result.totalCurrentBalance}`);
+  } catch (error) {
+    console.error("Failed to set monthly opening balance:", error);
+  }
+});
 
 const app = express();
 
@@ -49,6 +65,7 @@ app.use("/api", financialReportRoutes);
 app.use("/api", DatabaseBackupRoutes);
 app.use("/api", GSTReportRoutes);
 app.use("/api", CompanyRoutes);
+app.use("/api", TDSRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

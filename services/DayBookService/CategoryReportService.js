@@ -7,9 +7,10 @@ class ReportService {
   static async generateTransactionReport(category, startDate, endDate) {
     try {
       // Get all transactions for the given category and date range
+      console.log(category, startDate, endDate);
       const transactions = await DayBook.findAll({
         where: {
-          category : category || "DIRECT",
+          category: category || "DIRECT",
           transaction_date: {
             [Op.between]: [startDate, endDate],
           },
@@ -26,7 +27,8 @@ class ReportService {
       console.log("Here", transactions);
       // Group transactions by company
       const companyTransactions = transactions.reduce((acc, transaction) => {
-        const companyName = transaction.company_name || transaction.car_id;
+        console.log(transaction, acc);
+        const companyName = transaction.company.company_name || transaction.car_id;
         if (!acc[companyName]) {
           acc[companyName] = {
             credits: 0,
@@ -48,7 +50,7 @@ class ReportService {
 
       // Generate Excel workbook
       const workbook = XLSX.utils.book_new();
-
+      console.log(companyTransactions);
       // Create summary worksheet
       const summaryData = Object.entries(companyTransactions).map(
         ([company, data]) => ({

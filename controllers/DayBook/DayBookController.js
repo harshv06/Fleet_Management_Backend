@@ -11,25 +11,40 @@ class DayBookController {
       res.status(500).json({ status: "error", message: error.message });
     }
   }
+  // In your controller
+  async setMonthlyOpeningBalance(req, res) {
+    try {
+      const { year, month } = req.body;
+      const result = await DayBookService.setMonthlyOpeningBalance(
+        year || new Date().getFullYear(),
+        month || new Date().getMonth() + 1
+      );
+      res.json({
+        message: "Monthly opening balance set successfully",
+        data: result,
+      });
+    } catch (error) {
+      res.status(500).json({
+        message: "Failed to set monthly opening balance",
+        error: error.message,
+      });
+    }
+  }
 
   static async getTransactions(req, res) {
     try {
-      const { 
-        page = 1, 
-        limit = 20, 
-        ...otherFilters 
-      } = req.query;
-  
+      const { page = 1, limit = 20, ...otherFilters } = req.query;
+
       const result = await DayBookService.getTransactions({
         page: parseInt(page),
         limit: parseInt(limit),
-        ...otherFilters
+        ...otherFilters,
       });
-  
-      res.json({ 
-        status: "success", 
+
+      res.json({
+        status: "success",
         data: result.transactions,
-        pagination: result.pagination 
+        pagination: result.pagination,
       });
     } catch (error) {
       res.status(500).json({ status: "error", message: error.message });
@@ -82,11 +97,11 @@ class DayBookController {
     try {
       const { transactionId: id } = req.params;
       // console.log("ID:",id);
-      const data=await DayBookService.deleteTransaction(id);
+      const data = await DayBookService.deleteTransaction(id);
       res.json({
         status: "success",
         message: "Transaction deleted successfully",
-        data:data
+        data: data,
       });
     } catch (error) {
       res.status(500).json({

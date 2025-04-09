@@ -69,7 +69,7 @@ class FinancialReportController {
 
           return {
             name: category.name,
-            subGroups: subGroupsWithExpenses.filter(sg => sg.amount > 0),
+            subGroups: subGroupsWithExpenses.filter((sg) => sg.amount > 0),
             total: categoryTotal,
           };
         })
@@ -115,7 +115,7 @@ class FinancialReportController {
 
           return {
             name: category.name,
-            subGroups: subGroupsWithSales.filter(sg => sg.amount > 0),
+            subGroups: subGroupsWithSales.filter((sg) => sg.amount > 0),
             total: categoryTotal,
           };
         })
