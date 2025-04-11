@@ -80,7 +80,7 @@ async function initializeDatabase() {
     console.log("Database connection established successfully.");
     // await createCustomSequence();
     // Sync models
-    await sequelize.sync({ force: false });
+    await sequelize.sync({ force: false,alter: true });
     console.log("Models synchronized successfully.");
   } catch (error) {
     console.error("Unable to connect to the database:", error);
