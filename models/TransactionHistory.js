@@ -79,6 +79,10 @@ module.exports = (sequelize, DataTypes) => {
           key: "payment_id",
         },
       },
+      tds_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+      },
     },
     {
       tableName: "transaction_histories",

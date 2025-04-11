@@ -32,7 +32,7 @@ router.get(
   apiLimiter,
   validateToken,
   checkPermission(PERMISSIONS.CARS.VIEW),
-  carCacheMiddleware(CACHE_DURATIONS.SHORT),
+  // carCacheMiddleware(CACHE_DURATIONS.SHORT),
   CarsController.getAllCars
 );
 router.get(

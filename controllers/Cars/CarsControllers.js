@@ -12,14 +12,17 @@ class CarsController {
         search = "",
         sortBy = "car_id",
         sortOrder = "ASC",
+        status = "ACTIVE",
       } = req.query;
 
+      console.log(status)
       const cars = await CarsService.getAllCars(
         parseInt(page),
         parseInt(limit),
         search,
         sortBy,
-        sortOrder.toUpperCase()
+        sortOrder.toUpperCase(),
+        status
       );
 
       res.json(cars);

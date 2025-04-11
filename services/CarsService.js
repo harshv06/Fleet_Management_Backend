@@ -21,6 +21,7 @@ class CarsService {
     sortOrder = "ASC",
     status = null
   ) {
+    console.log("Status:", status);
     try {
       const offset = (page - 1) * limit;
 
