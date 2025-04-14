@@ -7,6 +7,8 @@ const {
   Company,
   PaymentHistory,
   CarExpenseStats,
+  SubVendor,
+  FleetCompany,
 } = require("../models/index");
 const { cacheService } = require("../utils/cache");
 const { Op } = require("sequelize");
@@ -486,7 +488,7 @@ class CarsService {
         "car_model",
         "driver_name",
         "driver_number",
-        "payment_type",
+        // "payment_type",
       ];
 
       for (const field of requiredFields) {
@@ -496,17 +498,17 @@ class CarsService {
       }
 
       // Validate payment type specific fields
-      if (carData.payment_type === "TRIP_BASED" && !carData.per_trip_amount) {
-        throw new Error("Per trip amount is required for trip-based payment");
-      }
-      if (
-        carData.payment_type === "PACKAGE_BASED" &&
-        !carData.monthly_package_rate
-      ) {
-        throw new Error(
-          "Monthly package rate is required for package-based payment"
-        );
-      }
+      // if (carData.payment_type === "TRIP_BASED" && !carData.per_trip_amount) {
+      //   throw new Error("Per trip amount is required for trip-based payment");
+      // }
+      // if (
+      //   carData.payment_type === "PACKAGE_BASED" &&
+      //   !carData.monthly_package_rate
+      // ) {
+      //   throw new Error(
+      //     "Monthly package rate is required for package-based payment"
+      //   );
+      // }
 
       // Format the data
       const formattedData = {
@@ -523,7 +525,10 @@ class CarsService {
           carData.payment_type === "PACKAGE_BASED"
             ? parseFloat(carData.monthly_package_rate)
             : null,
+        fleet_company_ids: carData.fleet_company_ids,
       };
+
+      console.log(formattedData);
 
       const newCar = await Cars.create(formattedData, { transaction });
       await this.clearCarCache();
@@ -1250,6 +1255,53 @@ class CarsService {
         { total_expense: cumulativeTotalExpense },
         { transaction }
       );
+    }
+  }
+
+  static async getFleetAssignedToCar(carId) {
+    try {
+      // First, fetch the car with its sub-vendor
+      const car = await Cars.findByPk(carId, {
+        include: [
+          {
+            model: SubVendor,
+            as: "client_subVendor",
+            attributes: ["sub_vendor_name"],
+          },
+        ],
+      });
+
+      if (!car) {
+        throw new Error("Car not found");
+      }
+
+      console.log(car);
+      // Fetch companies separately using the fleet_company_ids
+      const companiesDetails = await FleetCompany.findAll({
+        where: {
+          fleet_company_id: car.fleet_company_ids, // Use the array of company IDs
+        },
+      });
+
+      // Transform companies details
+      const formattedCompanies = companiesDetails.map((company) => ({
+        fleet_company_id: company.fleet_company_id,
+        company_name: company.company_name,
+      }));
+
+      // Prepare the full response
+      return {
+        car: {
+          client_type: car.client_type,
+          sub_vendor_name: car.client_subVendor
+            ? car.client_subVendor.sub_vendor_name
+            : null,
+        },
+        companies: formattedCompanies,
+      };
+    } catch (error) {
+      console.error("Error in getFleetAssignedToCar controller:", error);
+      throw error; // Re-throw to be handled by the controller
     }
   }
   // Add this method to your CarExpenseStats model

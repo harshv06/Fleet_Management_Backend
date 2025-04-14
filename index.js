@@ -24,6 +24,7 @@ const CompanyRoutes = require("./routes/CompanyProfile/CompanyProfileRoutes");
 const cron = require("node-cron");
 const DayBookService = require("./services/DayBookService/DayBookService");
 const TDSRoutes = require("./routes/TDS/TDSRoutes");
+const FleetRouter = require("./routes/FleetRoutes");
 // const { Sequelize, DataTypes } = require('sequelize');
 
 cron.schedule("0 0 1 * *", async () => {
@@ -66,6 +67,7 @@ app.use("/api", DatabaseBackupRoutes);
 app.use("/api", GSTReportRoutes);
 app.use("/api", CompanyRoutes);
 app.use("/api", TDSRoutes);
+app.use("/api", FleetRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -80,7 +82,7 @@ async function initializeDatabase() {
     console.log("Database connection established successfully.");
     // await createCustomSequence();
     // Sync models
-    await sequelize.sync({ force: false,alter: true });
+    await sequelize.sync({ force: false, alter: true });
     console.log("Models synchronized successfully.");
   } catch (error) {
     console.error("Unable to connect to the database:", error);

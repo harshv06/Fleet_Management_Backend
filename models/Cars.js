@@ -57,7 +57,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       payment_type: {
         type: DataTypes.ENUM("TRIP_BASED", "PACKAGE_BASED"),
-        allowNull: false,
+        allowNull: true,
       },
       per_trip_amount: {
         type: DataTypes.DECIMAL(15, 2),
@@ -71,6 +71,20 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM("ACTIVE", "INACTIVE", "IN_PROCESS"),
         defaultValue: "IN_PROCESS",
         allowNull: false,
+      },
+      client_type: {
+        type: DataTypes.ENUM("OWNED", "SUB_VENDOR"),
+        allowNull: false,
+        defaultValue: "OWNED",
+      },
+      sub_vendor_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      fleet_company_ids: {
+        type: DataTypes.ARRAY(DataTypes.UUID), // For PostgreSQL
+        // Or for MySQL: type: DataTypes.JSON,
+        allowNull: true,
       },
     },
     {
