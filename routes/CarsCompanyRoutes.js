@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const CarsController = require("../controllers/Cars/CarsControllers");
+const subVendorController=require("../controllers/Cars/SubVendorController")
 const {
   AssignedCarsCacheMiddleware,
   AvailableCompaniesToAssing,
@@ -41,5 +42,21 @@ router.put(
   ]),
   CarsController.unassignCompaniesFromCar
 );
+
+// SubVendor routes
+router.get(
+  "/subVendors/with-companies",
+  subVendorController.getSubVendorsWithCompanies
+);
+
+// Cars routes
+router.get(
+  "/cars/:carId/available-companies",
+  CarsController.getAvailableCompanies
+);
+// router.post(
+//   "/cars/:carId/assign-companies",
+//   carsController.assignCompaniesToCar
+// );
 
 module.exports = router;

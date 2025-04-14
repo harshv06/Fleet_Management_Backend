@@ -1,7 +1,15 @@
 // const Cars = require("../../models/Cars");
-const { Cars, CarPayments,sequelize } = require("../../models/index");
+const {
+  Cars,
+  CarPayments,
+  sequelize,
+  FleetCompany,
+  SubVendor,
+  CompanyCars,
+} = require("../../models/index");
 const CarCompanyAssignmentService = require("../../services/CarCompanyAssignmentService");
 const CarsService = require("../../services/CarsService");
+const { Op } = require("sequelize");
 
 class CarsController {
   static async getAllCars(req, res) {
@@ -15,7 +23,7 @@ class CarsController {
         status = "ACTIVE",
       } = req.query;
 
-      console.log(status)
+      console.log(status);
       const cars = await CarsService.getAllCars(
         parseInt(page),
         parseInt(limit),
@@ -103,8 +111,6 @@ class CarsController {
           },
           { transaction }
         );
-
-        
 
         await transaction.commit();
         return res.status(200).json({
@@ -208,6 +214,8 @@ class CarsController {
   }
 
   static async assignCompaniesToCar(req, res) {
+    const transaction = await sequelize.transaction();
+
     try {
       const { carId } = req.params;
       const { companies } = req.body;
@@ -225,13 +233,170 @@ class CarsController {
         });
       }
 
-      const assignments =
-        await CarCompanyAssignmentService.assignCompaniesToCar(
-          carId,
-          companies
-        );
+      // Fetch the car with its current details
+      const car = await Cars.findByPk(carId, {
+        include: [
+          {
+            model: SubVendor,
+            as: "client_subVendor",
+            attributes: ["sub_vendor_id"],
+          },
+        ],
+        transaction,
+      });
 
-      res.status(201).json({
+      if (!car) {
+        return res.status(404).json({
+          status: "error",
+          message: "Car not found",
+        });
+      }
+
+      // console.log(car);
+
+      // Validate companies exist and match the car's client type
+      const companiesDetails = await FleetCompany.findAll({
+        where: {
+          fleet_company_id: {
+            [Op.in]: companies,
+          },
+        },
+        include: [
+          {
+            model: SubVendor,
+            as: "sub_vendor",
+            attributes: ["sub_vendor_id"],
+          },
+        ],
+        transaction,
+      });
+
+      console.log(companiesDetails);
+
+      // Validate companies
+      if (companiesDetails.length !== companies.length) {
+        return res.status(400).json({
+          status: "error",
+          message: "Some companies do not exist",
+        });
+      }
+
+      const assignedSubVendorIds = new Set(
+        companiesDetails
+          .map((company) => company.sub_vendor_id)
+          .filter((id) => id !== null)
+      );
+
+      let updateData = { fleet_company_ids: companies };
+
+      if (assignedSubVendorIds.size === 1) {
+        // If all companies belong to the same sub-vendor
+        const subVendorId = Array.from(assignedSubVendorIds)[0];
+        updateData.client_type = "SUB_VENDOR";
+        updateData.sub_vendor_id = subVendorId;
+      } else if (assignedSubVendorIds.size === 0) {
+        // If no sub-vendor (standalone companies)
+        updateData.client_type = "OWNED";
+        updateData.sub_vendor_id = null;
+      }
+
+      // Update car details
+      await car.update(updateData, { transaction });
+
+      // Get current active assignments
+      const currentAssignments = await CompanyCars.findAll({
+        where: {
+          car_id: carId,
+          status: "active",
+        },
+        transaction,
+      });
+
+      if (companiesDetails.sub_vendor_id) {
+        await Cars.update(
+          {
+            client_type: "SUB_VENDOR",
+          },
+          {
+            where: {
+              car_id: carId,
+            },
+            transaction,
+          }
+        );
+      }
+
+      // Determine companies to deactivate
+      const currentAssignmentIds = currentAssignments.map(
+        (a) => a.fleet_company_id
+      );
+      const assignmentsToDeactivate = currentAssignmentIds.filter(
+        (id) => !companies.includes(id)
+      );
+
+      // Deactivate current assignments not in the new list
+      if (assignmentsToDeactivate.length > 0) {
+        await CompanyCars.update(
+          {
+            status: "inactive",
+            unassignment_date: new Date(),
+          },
+          {
+            where: {
+              car_id: carId,
+              fleet_company_id: assignmentsToDeactivate,
+              status: "active",
+            },
+            transaction,
+          }
+        );
+      }
+
+      // Create or reactivate assignments
+      const assignments = await Promise.all(
+        companies.map(async (companyId) => {
+          const existingAssignment = await CompanyCars.findOne({
+            where: {
+              car_id: carId,
+              fleet_company_id: companyId,
+            },
+            transaction,
+          });
+
+          if (existingAssignment) {
+            // Reactivate if inactive
+            if (existingAssignment.status === "inactive") {
+              return existingAssignment.update(
+                {
+                  status: "active",
+                  assignment_date: new Date(),
+                  unassignment_date: null,
+                },
+                { transaction }
+              );
+            }
+            return existingAssignment;
+          } else {
+            // Create new assignment
+            return CompanyCars.create(
+              {
+                car_id: carId,
+                fleet_company_id: companyId,
+                assignment_date: new Date(),
+                status: "active",
+              },
+              { transaction }
+            );
+          }
+        })
+      );
+
+      // Update car's fleet_company_ids
+      await car.update({ fleet_company_ids: companies }, { transaction });
+
+      await transaction.commit();
+
+      return res.status(201).json({
         status: "success",
         message: "Companies assigned successfully",
         data: {
@@ -240,6 +405,7 @@ class CarsController {
         },
       });
     } catch (error) {
+      await transaction.rollback();
       console.error("Assign Companies Error:", error);
       res.status(500).json({
         status: "error",
@@ -278,36 +444,50 @@ class CarsController {
 
   static async getAvailableCompanies(req, res) {
     try {
-      const { carId } = req.params;
+      const carId = req.params.carId;
 
-      if (!carId) {
-        return res.status(400).json({
-          status: "error",
-          message: "Car ID is required",
-        });
+      // Fetch the car to get its current assigned companies
+      const car = await Cars.findByPk(carId);
+
+      if (!car) {
+        return res.status(404).json({ message: "Car not found" });
       }
 
-      const availableCompanies =
-        await CarCompanyAssignmentService.getAvailableCompanies(carId);
+      // Find companies not already assigned to this car
+      const companies = await FleetCompany.findAll({
+        where: {
+          fleet_company_id: {
+            [Op.notIn]: car.fleet_company_ids || [],
+          },
+        },
+        include: [
+          {
+            model: SubVendor,
+            as: "sub_vendor",
+            attributes: ["sub_vendor_id"],
+          },
+        ],
+      });
 
-      res.status(200).json({
-        status: "success",
-        companies: availableCompanies,
-        total: availableCompanies.length,
+      res.json({
+        companies: companies.map((company) => ({
+          fleet_company_id: company.fleet_company_id,
+          company_name: company.company_name,
+          sub_vendor_id: company.sub_vendor
+            ? company.sub_vendor.sub_vendor_id
+            : null,
+        })),
       });
     } catch (error) {
-      console.error("Get Available Companies Error:", error);
-      res.status(500).json({
-        status: "error",
-        message: error.message || "Failed to retrieve available companies",
-      });
+      console.error("Error fetching available companies:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   }
 
   static async deleteCarPayment(req, res) {
     try {
       const { paymentId } = req.params;
-      console.log("done:",paymentId,req.params);
+      console.log("done:", paymentId, req.params);
       await CarsService.deleteCarPayments(paymentId);
       res.json({ message: "Car payment deleted successfully" });
     } catch (error) {
@@ -330,33 +510,31 @@ class CarsController {
   static async unassignCompaniesFromCar(req, res) {
     try {
       const { carId, companyId } = req.params;
+
       // Validate input
       if (!carId || !companyId) {
         return res.status(400).json({
           status: "error",
-          message: "Invalid input: Car ID and companies are required",
+          message: "Invalid input: Car ID and Company ID are required",
         });
       }
 
-      const unassignments =
+      const unassignment =
         await CarCompanyAssignmentService.unassignCompaniesFromCar(
           carId,
           companyId
         );
 
-      res.status(201).json({
+      res.status(200).json({
         status: "success",
-        message: "Companies unassigned successfully",
-        data: {
-          unassignments,
-          total: unassignments.length,
-        },
+        message: "Company unassigned successfully",
+        data: unassignment,
       });
     } catch (error) {
       console.error("Unassign Companies Error:", error);
       res.status(500).json({
         status: "error",
-        message: error.message || "Failed to unassign companies",
+        message: error.message || "Failed to unassign company",
       });
     }
   }
@@ -417,6 +595,11 @@ class CarsController {
       console.error("Error saving salary calculation:", error);
       res.status(500).json({ error: "Internal server error" });
     }
+  }
+
+  static async getFleetAssignedToCar(req, res) {
+    const response = await CarsService.getFleetAssignedToCar(req.params.carId);
+    res.json(response);
   }
 }
 

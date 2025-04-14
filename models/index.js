@@ -30,6 +30,8 @@ const BankAccount = require("./BankAccount/BankAccount");
 const BankTransaction = require("./BankAccount/BankTransaction");
 const CompanyProfileModel = require("./CompanyProfile/CompanyProfile");
 const TDSRecord = require("./TDS");
+const SubVendorModel = require("./SubVendors");
+const fleetComapanyModel = require("./FleetCompanies");
 
 // Initialize models
 const Company = CompanyModel(sequelize, DataTypes);
@@ -62,6 +64,8 @@ const BankAccountModel = BankAccount(sequelize, DataTypes);
 const BankTransactionModel = BankTransaction(sequelize, DataTypes);
 const CompanyProfile = CompanyProfileModel(sequelize, DataTypes);
 const TDS = TDSRecord(sequelize, DataTypes);
+const SubVendor = SubVendorModel(sequelize, DataTypes);
+const FleetCompany = fleetComapanyModel(sequelize, DataTypes);
 
 // Comprehensive Associations
 
@@ -436,6 +440,38 @@ Company.hasMany(TDS, {
   as: "tdsRecords",
 });
 
+SubVendor.hasMany(Cars, {
+  foreignKey: "sub_vendor_id",
+  as: "cars_fleet",
+});
+
+FleetCompany.hasMany(Cars, {
+  foreignKey: "fleet_company_id",
+  as: "fleet_cars",
+});
+
+Cars.belongsTo(SubVendor, {
+  foreignKey: "sub_vendor_id",
+  as: "client_subVendor",
+});
+
+Cars.belongsToMany(FleetCompany, {
+  through: 'CarCompanies',
+  foreignKey: "fleet_company_id",
+  as: "fleet_company",
+});
+
+// Add association between SubVendor and FleetCompany
+SubVendor.hasMany(FleetCompany, {
+  foreignKey: "sub_vendor_id",
+  as: "fleet_companies",
+});
+
+FleetCompany.belongsTo(SubVendor, {
+  foreignKey: "sub_vendor_id",
+  as: "sub_vendor",
+});
+
 // Export models with associations
 module.exports = {
   sequelize,
@@ -468,4 +504,6 @@ module.exports = {
   SubGroups,
   CompanyProfile,
   TDS,
+  SubVendor,
+  FleetCompany,
 };
